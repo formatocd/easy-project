@@ -11,6 +11,7 @@ import { ProjectSettingsModal } from './components/ProjectSettingsModal';
 import { TaskDetailsModal } from './components/TaskDetailsModal';
 import { ExportPdfModal } from './components/ExportPdfModal';
 import { CalendarSettingsModal } from './components/CalendarSettingsModal';
+import { Language } from './i18n/translations';
 
 export const App: React.FC = () => {
   const [projectPayload, setProjectPayload] = useState<ProjectPayload | null>(null);
@@ -18,9 +19,23 @@ export const App: React.FC = () => {
   const [collapsedTaskIds, setCollapsedTaskIds] = useState<Set<number>>(new Set());
   const [activeView, setActiveView] = useState<ActiveView>('GANTT');
   const [zoomLevel, setZoomLevel] = useState<ZoomLevel>('DAYS');
+  const [language, setLanguage] = useState<Language>(() => {
+    const saved = localStorage.getItem('easy_project_lang');
+    return saved === 'en' || saved === 'es' ? saved : 'es';
+  });
   const [darkMode, setDarkMode] = useState<boolean>(() => {
+    const saved = localStorage.getItem('easy_project_theme');
+    if (saved) return saved === 'dark';
     return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
+
+  const toggleLanguage = useCallback(() => {
+    setLanguage((prev) => {
+      const next = prev === 'es' ? 'en' : 'es';
+      localStorage.setItem('easy_project_lang', next);
+      return next;
+    });
+  }, []);
 
   // Modal States
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -30,12 +45,14 @@ export const App: React.FC = () => {
 
   const selectedTaskId = selectedTaskIds[0] ?? null;
 
-  // Sync dark class on body
+  // Sync dark class on body & localStorage
   useEffect(() => {
     if (darkMode) {
       document.documentElement.classList.add('dark');
+      localStorage.setItem('easy_project_theme', 'dark');
     } else {
       document.documentElement.classList.remove('dark');
+      localStorage.setItem('easy_project_theme', 'light');
     }
   }, [darkMode]);
 
@@ -516,19 +533,22 @@ export const App: React.FC = () => {
         onViewChange={setActiveView}
         onZoomChange={setZoomLevel}
         onToggleTheme={() => setDarkMode(!darkMode)}
+        language={language}
+        onToggleLanguage={toggleLanguage}
       />
 
       {/* Main Workspace View */}
       <main className="flex-1 overflow-hidden relative flex">
         {activeView === 'GANTT' ? (
           <SplitPane
-            initialLeftWidth={520}
+            initialLeftWidth={540}
             left={({ scrollRef, onScroll }) => (
               <TaskSheet
                 tasks={visibleTaskDtos}
                 selectedTaskIds={selectedTaskIds}
                 collapsedTaskIds={collapsedTaskIds}
                 hoursPerDay={projectPayload.data.meta.hours_per_day}
+                language={language}
                 onSelectTask={handleSelectTask}
                 onToggleCollapse={toggleCollapse}
                 onOpenTaskDetails={handleOpenTaskDetails}
@@ -572,6 +592,7 @@ export const App: React.FC = () => {
         selectedTaskIds={selectedTaskIds}
         scheduleFrom={projectPayload.data.meta.schedule_from}
         calculationMs={projectPayload.calculation_ms}
+        language={language}
       />
 
       {/* Modals */}

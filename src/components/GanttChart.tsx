@@ -230,7 +230,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({
       onScroll={onScroll}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
-      className="h-full overflow-auto bg-neutral-900 dark:bg-neutral-950 select-none relative"
+      className="h-full overflow-auto bg-white dark:bg-neutral-950 text-neutral-800 dark:text-neutral-200 select-none relative"
     >
       <div
         id="gantt-canvas-container"
@@ -238,16 +238,16 @@ export const GanttChart: React.FC<GanttChartProps> = ({
         className="relative"
       >
         {/* Timeline Header (Double Level) */}
-        <div className="sticky top-0 h-9 bg-neutral-800 dark:bg-neutral-900 border-b border-neutral-700 z-30 text-[10px] text-neutral-400 font-medium select-none shadow-md flex items-center">
+        <div className="sticky top-0 h-9 bg-neutral-100 dark:bg-neutral-900 border-b border-neutral-300 dark:border-neutral-700 z-30 text-[10px] text-neutral-600 dark:text-neutral-400 font-medium select-none shadow-xs flex items-center">
           {timelineTicks.map((tick, i) => (
             <div
               key={i}
               style={{ left: `${tick.x}px`, width: `${tick.width}px` }}
-              className={`absolute top-0 bottom-0 border-r border-neutral-700/80 px-1 py-0.5 flex flex-col justify-between ${
-                tick.isWeekend ? 'bg-neutral-950/40 text-neutral-500' : 'text-neutral-300'
+              className={`absolute top-0 bottom-0 border-r border-neutral-200 dark:border-neutral-800 px-1 py-0.5 flex flex-col justify-between ${
+                tick.isWeekend ? 'bg-neutral-200/50 dark:bg-neutral-950/40 text-neutral-500' : 'text-neutral-700 dark:text-neutral-300'
               }`}
             >
-              <div className="font-bold text-[10px] text-blue-400 truncate text-center">
+              <div className="font-bold text-[10px] text-blue-600 dark:text-blue-400 truncate text-center">
                 {tick.labelTop || ''}
               </div>
               <div className="text-center font-mono text-[10px]">{tick.labelBottom}</div>
@@ -261,8 +261,8 @@ export const GanttChart: React.FC<GanttChartProps> = ({
             <div
               key={idx}
               style={{ left: `${tick.x}px`, width: `${tick.width}px` }}
-              className={`absolute top-0 bottom-0 border-r border-neutral-800/60 ${
-                tick.isWeekend ? 'bg-neutral-950/30' : ''
+              className={`absolute top-0 bottom-0 border-r border-neutral-100 dark:border-neutral-800/60 ${
+                tick.isWeekend ? 'bg-neutral-100/70 dark:bg-neutral-950/30' : ''
               }`}
             />
           ))}
@@ -317,7 +317,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                 key={dep.id}
                 d={pathD}
                 fill="none"
-                stroke="#60a5fa"
+                stroke="#3b82f6"
                 strokeWidth="1.5"
                 markerEnd="url(#arrowhead)"
                 opacity="0.9"
@@ -348,8 +348,8 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                 }
                 onMouseLeave={() => setTooltip(null)}
                 style={{ top: `${top}px`, height: `${ROW_HEIGHT}px` }}
-                className={`absolute left-0 right-0 border-b border-neutral-800/80 flex items-center transition ${
-                  isSelected ? 'bg-blue-900/20' : 'hover:bg-neutral-800/30'
+                className={`absolute left-0 right-0 border-b border-neutral-200 dark:border-neutral-800 flex items-center transition ${
+                  isSelected ? 'bg-blue-50 dark:bg-blue-950/30' : 'hover:bg-neutral-50 dark:hover:bg-neutral-900/40'
                 }`}
               >
                 {/* 1. Milestone (Hito) */}
@@ -359,7 +359,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                     className="absolute z-20 group cursor-pointer"
                   >
                     <div className="w-3.5 h-3.5 bg-amber-400 transform rotate-45 border-2 border-amber-600 shadow-sm" />
-                    <span className="absolute left-5 top-[-2px] text-[11px] font-semibold text-amber-300 whitespace-nowrap drop-shadow">
+                    <span className="absolute left-5 top-[-2px] text-[11px] font-semibold text-neutral-800 dark:text-amber-300 whitespace-nowrap">
                       {task.name}
                     </span>
                   </div>
@@ -370,11 +370,11 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                     className="absolute z-20"
                   >
                     {/* Top horizontal solid bar */}
-                    <div className="h-2.5 bg-neutral-300 dark:bg-neutral-100 rounded-xs shadow relative">
+                    <div className="h-2.5 bg-neutral-800 dark:bg-neutral-200 rounded-xs shadow relative">
                       {/* Left bracket beak */}
-                      <div className="absolute -left-0.5 top-0 w-2 h-3.5 bg-neutral-300 dark:bg-neutral-100 [clip-path:polygon(0_0,100%_0,0_100%)]" />
+                      <div className="absolute -left-0.5 top-0 w-2 h-3.5 bg-neutral-800 dark:bg-neutral-200 [clip-path:polygon(0_0,100%_0,0_100%)]" />
                       {/* Right bracket beak */}
-                      <div className="absolute -right-0.5 top-0 w-2 h-3.5 bg-neutral-300 dark:bg-neutral-100 [clip-path:polygon(0_0,100%_0,100%_100%)]" />
+                      <div className="absolute -right-0.5 top-0 w-2 h-3.5 bg-neutral-800 dark:bg-neutral-200 [clip-path:polygon(0_0,100%_0,100%_100%)]" />
                       {/* Progress line inside summary */}
                       <div
                         style={{ width: `${task.percent_complete}%` }}
@@ -382,8 +382,8 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                       />
                     </div>
 
-                    <span className="absolute left-full ml-2.5 -top-1 text-[11px] font-bold text-neutral-200 whitespace-nowrap drop-shadow">
-                      {task.name} <span className="text-neutral-400 font-normal">({task.percent_complete}%)</span>
+                    <span className="absolute left-full ml-2.5 -top-1 text-[11px] font-bold text-neutral-800 dark:text-neutral-200 whitespace-nowrap">
+                      {task.name} <span className="text-neutral-500 dark:text-neutral-400 font-normal">({task.percent_complete}%)</span>
                     </span>
                   </div>
                 ) : (
@@ -400,7 +400,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                     {/* Inner Progress Bar */}
                     <div
                       style={{ width: `${task.percent_complete}%` }}
-                      className="absolute top-0 bottom-0 left-0 bg-blue-800 rounded-l pointer-events-none"
+                      className="absolute top-0 bottom-0 left-0 bg-blue-700 dark:bg-blue-800 rounded-l pointer-events-none opacity-80"
                     />
 
                     {/* Predecessor link connector dot (Right edge) */}
@@ -417,10 +417,10 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                     />
 
                     {/* Task Label beside bar */}
-                    <span className="absolute left-full ml-2 text-[11px] font-medium text-neutral-200 whitespace-nowrap pointer-events-none drop-shadow">
+                    <span className="absolute left-full ml-2 text-[11px] font-medium text-neutral-800 dark:text-neutral-200 whitespace-nowrap pointer-events-none">
                       {task.name}{' '}
                       {task.percent_complete > 0 ? (
-                        <span className="text-neutral-400">({task.percent_complete}%)</span>
+                        <span className="text-neutral-500 dark:text-neutral-400">({task.percent_complete}%)</span>
                       ) : (
                         ''
                       )}
@@ -433,7 +433,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                           left: `${timeToPx(task.baseline_start) - startX}px`,
                           width: `${Math.max(2, timeToPx(task.baseline_finish) - timeToPx(task.baseline_start))}px`,
                         }}
-                        className="absolute -bottom-2 h-1 bg-amber-400 rounded-xs pointer-events-none shadow-sm"
+                        className="absolute -bottom-2 h-1 bg-amber-500 dark:bg-amber-400 rounded-xs pointer-events-none shadow-sm"
                         title="Línea Base Original"
                       />
                     )}

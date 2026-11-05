@@ -2,12 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ChevronRight, ChevronDown, Diamond, FolderTree, CheckSquare, Plus } from 'lucide-react';
 import { TaskDto, Task } from '../types/project';
 import { formatDateTime, formatDuration, parseDurationInput } from '../utils/formatters';
+import { Language, translations } from '../i18n/translations';
 
 interface TaskSheetProps {
   tasks: TaskDto[];
   selectedTaskIds: number[];
   collapsedTaskIds: Set<number>;
   hoursPerDay: number;
+  language: Language;
   onSelectTask: (taskId: number, e?: React.MouseEvent) => void;
   onToggleCollapse: (taskId: number) => void;
   onOpenTaskDetails: (taskId: number) => void;
@@ -27,6 +29,7 @@ export const TaskSheet: React.FC<TaskSheetProps> = ({
   selectedTaskIds,
   collapsedTaskIds,
   hoursPerDay,
+  language,
   onSelectTask,
   onToggleCollapse,
   onOpenTaskDetails,
@@ -38,11 +41,29 @@ export const TaskSheet: React.FC<TaskSheetProps> = ({
   scrollRef,
   onScroll,
 }) => {
+  const t = translations[language];
   const [editingCell, setEditingCell] = useState<{ id: number; field: EditableField } | null>(null);
   const [editValue, setEditValue] = useState<string>('');
   const [quickTaskName, setQuickTaskName] = useState<string>('');
+  const [containerWidth, setContainerWidth] = useState<number>(520);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const quickInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Measure visible pane width to auto-center empty state banner
+  useEffect(() => {
+    const el = scrollRef?.current;
+    if (!el) return;
+    setContainerWidth(el.clientWidth || 520);
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect.width > 0) {
+          setContainerWidth(entry.contentRect.width);
+        }
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [scrollRef]);
 
   // Focus input when editing starts
   useEffect(() => {
@@ -188,36 +209,42 @@ export const TaskSheet: React.FC<TaskSheetProps> = ({
       <table className="w-full border-collapse text-left table-fixed">
         <thead className="sticky top-0 bg-neutral-100 dark:bg-neutral-900 border-b border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400 font-semibold z-10 shadow-sm">
           <tr style={{ height: '36px' }}>
-            <th className="w-10 px-1 py-0 h-9 border-r border-neutral-200 dark:border-neutral-800 text-center align-middle">ID</th>
-            <th className="w-8 px-1 py-0 h-9 border-r border-neutral-200 dark:border-neutral-800 text-center align-middle">Tipo</th>
-            <th className="w-14 px-1 py-0 h-9 border-r border-neutral-200 dark:border-neutral-800 text-center align-middle">EDT</th>
-            <th className="w-56 px-2 py-0 h-9 border-r border-neutral-200 dark:border-neutral-800 align-middle">Nombre de tarea</th>
-            <th className="w-20 px-2 py-0 h-9 border-r border-neutral-200 dark:border-neutral-800 text-right align-middle">Duración</th>
-            <th className="w-32 px-2 py-0 h-9 border-r border-neutral-200 dark:border-neutral-800 align-middle">Comienzo</th>
-            <th className="w-32 px-2 py-0 h-9 border-r border-neutral-200 dark:border-neutral-800 align-middle">Fin</th>
-            <th className="w-24 px-2 py-0 h-9 border-r border-neutral-200 dark:border-neutral-800 align-middle">Predecesoras</th>
-            <th className="w-16 px-2 py-0 h-9 text-right align-middle">% Avance</th>
+            <th className="w-10 px-1 py-0 h-9 border-r border-neutral-200 dark:border-neutral-800 text-center align-middle">{t.id}</th>
+            <th className="w-8 px-1 py-0 h-9 border-r border-neutral-200 dark:border-neutral-800 text-center align-middle">{t.type}</th>
+            <th className="w-14 px-1 py-0 h-9 border-r border-neutral-200 dark:border-neutral-800 text-center align-middle">{t.wbs}</th>
+            <th className="w-56 px-2 py-0 h-9 border-r border-neutral-200 dark:border-neutral-800 align-middle">{t.taskName}</th>
+            <th className="w-20 px-2 py-0 h-9 border-r border-neutral-200 dark:border-neutral-800 text-right align-middle">{t.duration}</th>
+            <th className="w-32 px-2 py-0 h-9 border-r border-neutral-200 dark:border-neutral-800 align-middle">{t.start}</th>
+            <th className="w-32 px-2 py-0 h-9 border-r border-neutral-200 dark:border-neutral-800 align-middle">{t.finish}</th>
+            <th className="w-24 px-2 py-0 h-9 border-r border-neutral-200 dark:border-neutral-800 align-middle">{t.predecessors}</th>
+            <th className="w-16 px-2 py-0 h-9 text-right align-middle">{t.percent}</th>
           </tr>
         </thead>
         <tbody>
-          {/* Empty project initial guide banner */}
+          {/* Empty project initial guide banner (Centered in visible pane) */}
           {tasks.length === 0 && (
             <tr className="border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-900/30">
-              <td colSpan={9} className="text-center py-8 px-4">
-                <p className="text-sm font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
-                  El proyecto no tiene tareas todavía
-                </p>
-                <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-4 max-w-md mx-auto leading-relaxed">
-                  Escribe en la fila de abajo y pulsa <kbd className="px-1.5 py-0.5 rounded bg-neutral-200 dark:bg-neutral-800 font-mono text-[10px] text-neutral-700 dark:text-neutral-300">Enter</kbd>, pega un listado de tareas con <kbd className="px-1.5 py-0.5 rounded bg-neutral-200 dark:bg-neutral-800 font-mono text-[10px] text-neutral-700 dark:text-neutral-300">Ctrl+V</kbd>, o haz clic en:
-                </p>
-                <button
-                  type="button"
-                  onClick={() => onAddTask()}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-blue-600 text-white hover:bg-blue-700 font-medium text-xs shadow-xs transition"
+              <td colSpan={9} className="p-0 border-none">
+                <div
+                  className="sticky left-0 py-10 px-4 flex flex-col items-center justify-center text-center overflow-hidden"
+                  style={{ width: `${containerWidth}px` }}
                 >
-                  <Plus className="w-3.5 h-3.5" />
-                  Añadir primera tarea
-                </button>
+                  <p className="text-sm font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
+                    {t.emptyTitle}
+                  </p>
+                  <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-4 max-w-sm mx-auto leading-relaxed">
+                    {t.emptyDesc}{' '}
+                    <kbd className="px-1.5 py-0.5 rounded bg-neutral-200 dark:bg-neutral-800 font-mono text-[10px] text-neutral-700 dark:text-neutral-300">Enter</kbd>
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => onAddTask()}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-blue-600 text-white hover:bg-blue-700 font-medium text-xs shadow-xs transition"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    {t.emptyBtn}
+                  </button>
+                </div>
               </td>
             </tr>
           )}
@@ -416,7 +443,7 @@ export const TaskSheet: React.FC<TaskSheetProps> = ({
                   type="text"
                   value={quickTaskName}
                   onChange={(e) => setQuickTaskName(e.target.value)}
-                  placeholder={tasks.length === 0 ? "Escribe un nombre de tarea y pulsa Enter..." : "Nueva tarea... (pulsa Enter para agregar)"}
+                  placeholder={tasks.length === 0 ? t.quickAddPlaceholder : t.quickAddRow}
                   className="w-full bg-transparent border-none outline-none text-xs text-neutral-800 dark:text-neutral-200 placeholder-neutral-400 dark:placeholder-neutral-500 focus:placeholder-transparent"
                 />
               </form>

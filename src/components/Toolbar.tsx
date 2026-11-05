@@ -26,6 +26,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { ActiveView, ZoomLevel } from '../types/project';
+import { Language, translations } from '../i18n/translations';
 
 interface ToolbarProps {
   projectName: string;
@@ -36,6 +37,7 @@ interface ToolbarProps {
   activeView: ActiveView;
   zoomLevel: ZoomLevel;
   darkMode: boolean;
+  language: Language;
   hasSelectedTask: boolean;
   onNew: () => void;
   onOpen: () => void;
@@ -58,6 +60,7 @@ interface ToolbarProps {
   onViewChange: (view: ActiveView) => void;
   onZoomChange: (zoom: ZoomLevel) => void;
   onToggleTheme: () => void;
+  onToggleLanguage: () => void;
 }
 
 const ZOOM_LEVELS: ZoomLevel[] = ['HOURS', 'DAYS', 'WEEKS', 'MONTHS', 'YEARS'];
@@ -71,6 +74,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   activeView,
   zoomLevel,
   darkMode,
+  language,
   hasSelectedTask,
   onNew,
   onOpen,
@@ -93,8 +97,10 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onViewChange,
   onZoomChange,
   onToggleTheme,
+  onToggleLanguage,
 }) => {
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const t = translations[language];
   const currentZoomIdx = ZOOM_LEVELS.indexOf(zoomLevel);
 
   const handleZoomIn = () => {
@@ -139,9 +145,17 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           )}
 
           <button
+            onClick={onToggleLanguage}
+            className="px-2 py-0.5 rounded border border-neutral-300 dark:border-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-800 text-[11px] font-semibold text-neutral-700 dark:text-neutral-300 shrink-0"
+            title={language === 'es' ? 'Switch to English' : 'Cambiar a Español'}
+          >
+            {language === 'es' ? 'EN' : 'ES'}
+          </button>
+
+          <button
             onClick={onToggleTheme}
             className="p-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-600 dark:text-neutral-300"
-            title="Alternar Tema Claro / Oscuro"
+            title={t.themeToggle}
           >
             {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </button>
@@ -155,37 +169,37 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           <button
             onClick={onNew}
             className="inline-flex items-center gap-1.5 px-2 py-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-800 shrink-0 whitespace-nowrap"
-            title="Nuevo proyecto"
+            title={t.new}
           >
             <FilePlus className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-            <span className="hidden xl:inline">Nuevo</span>
+            <span className="hidden xl:inline">{t.new}</span>
           </button>
 
           <button
             onClick={onOpen}
             className="inline-flex items-center gap-1.5 px-2 py-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-800 shrink-0 whitespace-nowrap"
-            title="Abrir archivo (.epr)"
+            title={t.open}
           >
             <FolderOpen className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-            <span className="hidden xl:inline">Abrir</span>
+            <span className="hidden xl:inline">{t.open}</span>
           </button>
 
           <button
             onClick={onSave}
             className="inline-flex items-center gap-1.5 px-2 py-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-800 shrink-0 whitespace-nowrap"
-            title="Guardar cambios (Ctrl+S)"
+            title={t.save}
           >
             <Save className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-            <span className="hidden lg:inline">Guardar</span>
+            <span className="hidden lg:inline">{t.save}</span>
           </button>
 
           <button
             onClick={onSaveAs}
             className="inline-flex items-center gap-1.5 px-2 py-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-600 dark:text-neutral-400 shrink-0 whitespace-nowrap"
-            title="Guardar como..."
+            title={t.saveAs}
           >
             <FolderDown className="w-3.5 h-3.5 text-neutral-500" />
-            <span className="hidden 2xl:inline">Como...</span>
+            <span className="hidden 2xl:inline">{t.saveAs}</span>
           </button>
 
           {/* Interoperability / Export Dropdown */}
@@ -193,10 +207,10 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             <button
               onClick={() => setShowExportMenu(!showExportMenu)}
               className="inline-flex items-center gap-1.5 px-2 py-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-800 font-medium text-neutral-700 dark:text-neutral-300 shrink-0 whitespace-nowrap"
-              title="Importar y Exportar datos"
+              title={t.exchange}
             >
               <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-500" />
-              <span className="hidden lg:inline">Intercambio</span>
+              <span className="hidden lg:inline">{t.exchange}</span>
             </button>
 
             {showExportMenu && (
@@ -218,7 +232,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                     className="w-full text-left px-3 py-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 flex items-center gap-2 text-neutral-800 dark:text-neutral-200"
                   >
                     <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-                    <span>Exportar a Excel (.xlsx)</span>
+                    <span>{t.exportExcel}</span>
                   </button>
 
                   <button
@@ -229,7 +243,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                     className="w-full text-left px-3 py-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 flex items-center gap-2 text-neutral-800 dark:text-neutral-200"
                   >
                     <FileText className="w-4 h-4 text-blue-500" />
-                    <span>Exportar a CSV (.csv)</span>
+                    <span>{t.exportCsv}</span>
                   </button>
 
                   <button
@@ -240,7 +254,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                     className="w-full text-left px-3 py-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 flex items-center gap-2 text-neutral-800 dark:text-neutral-200"
                   >
                     <Printer className="w-4 h-4 text-indigo-500" />
-                    <span>Asistente PDF / Gráfica...</span>
+                    <span>{t.pdfAssistant}</span>
                   </button>
 
                   <div className="border-t border-neutral-200 dark:border-neutral-800 my-1" />
@@ -253,7 +267,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                     className="w-full text-left px-3 py-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-medium"
                   >
                     <FileUp className="w-4 h-4" />
-                    <span>Importar MS Project XML</span>
+                    <span>{t.importXml}</span>
                   </button>
                 </div>
               </>
@@ -271,7 +285,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                 ? 'hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-700 dark:text-neutral-200'
                 : 'opacity-40 cursor-not-allowed text-neutral-400'
             }`}
-            title="Deshacer (Ctrl+Z)"
+            title={t.undo}
           >
             <Undo2 className="w-3.5 h-3.5" />
           </button>
@@ -284,7 +298,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                 ? 'hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-700 dark:text-neutral-200'
                 : 'opacity-40 cursor-not-allowed text-neutral-400'
             }`}
-            title="Rehacer (Ctrl+Y)"
+            title={t.redo}
           >
             <Redo2 className="w-3.5 h-3.5" />
           </button>
@@ -295,10 +309,10 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           <button
             onClick={onAddTask}
             className="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700 font-medium shrink-0 whitespace-nowrap"
-            title="Insertar nueva tarea"
+            title={t.addTask}
           >
             <Plus className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">Añadir Tarea</span>
+            <span className="hidden md:inline">{t.addTask}</span>
           </button>
 
           <button
@@ -309,10 +323,10 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                 ? 'hover:bg-red-100 text-red-600 dark:hover:bg-red-950 dark:text-red-400'
                 : 'opacity-40 cursor-not-allowed'
             }`}
-            title="Eliminar tarea seleccionada"
+            title={t.delete}
           >
             <Trash2 className="w-3.5 h-3.5" />
-            <span className="hidden xl:inline">Eliminar</span>
+            <span className="hidden xl:inline">{t.delete}</span>
           </button>
 
           <button
@@ -323,7 +337,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                 ? 'hover:bg-neutral-200 dark:hover:bg-neutral-800'
                 : 'opacity-40 cursor-not-allowed'
             }`}
-            title="Sangría izquierda (Desindentar / Subir nivel WBS)"
+            title={t.outdent}
           >
             <Outdent className="w-3.5 h-3.5 text-neutral-700 dark:text-neutral-300" />
           </button>
@@ -336,7 +350,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                 ? 'hover:bg-neutral-200 dark:hover:bg-neutral-800'
                 : 'opacity-40 cursor-not-allowed'
             }`}
-            title="Sangría derecha (Indentar / Convertir en subtarea)"
+            title={t.indent}
           >
             <Indent className="w-3.5 h-3.5 text-neutral-700 dark:text-neutral-300" />
           </button>
@@ -347,16 +361,16 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           <button
             onClick={onSaveBaseline}
             className="inline-flex items-center gap-1.5 px-2 py-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-800 shrink-0 whitespace-nowrap"
-            title="Guardar o actualizar Línea Base del proyecto"
+            title={t.baseline}
           >
             <BookmarkPlus className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-            <span className="hidden xl:inline">Línea Base</span>
+            <span className="hidden xl:inline">{t.baseline}</span>
           </button>
 
           <button
             onClick={onClearBaseline}
             className="inline-flex items-center gap-1.5 px-2 py-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-600 dark:text-neutral-400 shrink-0"
-            title="Borrar Línea Base"
+            title={t.clearBaseline}
           >
             <BookmarkX className="w-3.5 h-3.5" />
           </button>
@@ -367,10 +381,10 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           <button
             onClick={onOpenCalendarModal}
             className="inline-flex items-center gap-1.5 px-2 py-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-700 dark:text-neutral-300 shrink-0 whitespace-nowrap"
-            title="Configurar calendario laboral y festivos del proyecto"
+            title={t.calendarHolidays}
           >
             <CalendarIcon className="w-3.5 h-3.5 text-blue-500" />
-            <span className="hidden 2xl:inline">Jornada / Festivos</span>
+            <span className="hidden 2xl:inline">{t.calendarHolidays}</span>
           </button>
         </div>
 
@@ -385,10 +399,10 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                   ? 'bg-white dark:bg-neutral-900 shadow-sm text-blue-600 dark:text-blue-400'
                   : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200'
               }`}
-              title="Vista Diagrama de Gantt"
+              title={t.ganttView}
             >
               <BarChart2 className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">Gantt</span>
+              <span className="hidden md:inline">{t.ganttView}</span>
             </button>
 
             <button
@@ -398,10 +412,10 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                   ? 'bg-white dark:bg-neutral-900 shadow-sm text-blue-600 dark:text-blue-400'
                   : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200'
               }`}
-              title="Vista Calendario Mensual"
+              title={t.calendarView}
             >
               <CalendarIcon className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">Calendario</span>
+              <span className="hidden md:inline">{t.calendarView}</span>
             </button>
           </div>
 
@@ -412,7 +426,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                 onClick={handleZoomIn}
                 disabled={currentZoomIdx === 0}
                 className="p-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-800 disabled:opacity-40 shrink-0"
-                title="Acercar Zoom"
+                title="Zoom In"
               >
                 <ZoomIn className="w-3.5 h-3.5" />
               </button>
@@ -422,18 +436,18 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                 onChange={(e) => onZoomChange(e.target.value as ZoomLevel)}
                 className="bg-neutral-200 dark:bg-neutral-800 border-none rounded px-2 py-0.5 text-xs text-neutral-800 dark:text-neutral-200 focus:outline-none cursor-pointer shrink-0"
               >
-                <option value="HOURS">Horas</option>
-                <option value="DAYS">Días</option>
-                <option value="WEEKS">Semanas</option>
-                <option value="MONTHS">Meses</option>
-                <option value="YEARS">Años</option>
+                <option value="HOURS">{t.hours}</option>
+                <option value="DAYS">{t.days}</option>
+                <option value="WEEKS">{t.weeks}</option>
+                <option value="MONTHS">{t.months}</option>
+                <option value="YEARS">{t.years}</option>
               </select>
 
               <button
                 onClick={handleZoomOut}
                 disabled={currentZoomIdx === ZOOM_LEVELS.length - 1}
                 className="p-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-800 disabled:opacity-40 shrink-0"
-                title="Alejar Zoom"
+                title="Zoom Out"
               >
                 <ZoomOut className="w-3.5 h-3.5" />
               </button>
