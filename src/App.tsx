@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { ActiveView, Calendar, CalendarException, Dependency, ProjectPayload, Task, TaskDto, ZoomLevel } from './types/project';
+import { ActiveView, Calendar, CalendarException, ProjectPayload, Task, TaskDto, ZoomLevel } from './types/project';
 import { tauriApi } from './services/tauriApi';
 import { Toolbar } from './components/Toolbar';
 import { TaskSheet } from './components/TaskSheet';
@@ -487,13 +487,17 @@ export const App: React.FC = () => {
     a.click();
   };
 
-  const handlePrintPdf = (mode: 'ALL' | 'TABLE' | 'GANTT') => {
+  const handlePrintPdf = (config: {
+    content: 'both' | 'table' | 'gantt';
+    orientation: 'landscape' | 'portrait';
+    paper: string;
+  }) => {
     setIsExportPdfOpen(false);
 
     document.body.classList.remove('print-mode-table', 'print-mode-gantt', 'print-mode-all');
-    if (mode === 'TABLE') {
+    if (config.content === 'table') {
       document.body.classList.add('print-mode-table');
-    } else if (mode === 'GANTT') {
+    } else if (config.content === 'gantt') {
       document.body.classList.add('print-mode-gantt');
     } else {
       document.body.classList.add('print-mode-all');
