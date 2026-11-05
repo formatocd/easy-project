@@ -1,0 +1,179 @@
+@import "tailwindcss";
+
+@layer utilities {
+  .clip-triangle-down {
+    clip-path: polygon(0 0, 100% 0, 50% 100%);
+  }
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Print Styles for PDF Export */
+@media print {
+  @page {
+    size: landscape;
+    margin: 8mm;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  header, footer, .no-print, .fixed, [role="dialog"] {
+    display: none !important;
+  }
+
+  html, body, #root, main {
+    height: auto !important;
+    width: 100% !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  #split-pane-left > div,
+  #split-pane-right > div {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    border: none !important;
+    background: #ffffff !important;
+  }
+
+  /* Table styling in print */
+  table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+    table-layout: auto !important;
+  }
+
+  tr {
+    page-break-inside: avoid !important;
+  }
+
+  th, td {
+    border: 1px solid #cbd5e1 !important;
+    color: #0f172a !important;
+    background: transparent !important;
+    font-size: 8.5pt !important;
+    padding: 4px 6px !important;
+  }
+
+  th {
+    background-color: #f1f5f9 !important;
+    font-weight: bold !important;
+  }
+
+  td span, td div {
+    color: #0f172a !important;
+  }
+
+  /* Gantt styling in print */
+  #gantt-canvas-container {
+    background: #ffffff !important;
+  }
+
+  /* Timeline Header in print */
+  #gantt-canvas-container > div:first-child {
+    background-color: #f8fafc !important;
+    border-bottom: 1px solid #cbd5e1 !important;
+  }
+
+  #gantt-canvas-container > div:first-child * {
+    color: #1e293b !important;
+  }
+
+  /* Grid lines in print */
+  .border-neutral-800\/60,
+  .border-neutral-700\/80,
+  .border-neutral-800\/80 {
+    border-color: #e2e8f0 !important;
+  }
+
+  /* Summary Tasks in print (Solid dark charcoal for high contrast) */
+  .bg-neutral-300,
+  .dark\:bg-neutral-100 {
+    background-color: #1e293b !important;
+  }
+
+  /* Gantt bar labels in print */
+  .text-neutral-200,
+  .text-neutral-300,
+  .text-neutral-400 {
+    color: #0f172a !important;
+    text-shadow: none !important;
+    font-weight: 600 !important;
+  }
+
+  /* Normal task bars: solid blue */
+  .bg-blue-500,
+  .bg-blue-600 {
+    background-color: #2563eb !important;
+  }
+
+  /* Milestone diamond in print */
+  .bg-amber-400 {
+    background-color: #d97706 !important;
+  }
+
+  /* Print Modes */
+  body.print-table-only #split-pane-right,
+  body.print-table-only #split-pane-divider {
+    display: none !important;
+  }
+
+  body.print-table-only #split-pane-left {
+    width: 100% !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  body.print-gantt-only #split-pane-left,
+  body.print-gantt-only #split-pane-divider {
+    display: none !important;
+  }
+
+  body.print-gantt-only #split-pane-right {
+    width: 100% !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  /* Both: Clean split on landscape paper */
+  body.print-both #split-pane-divider {
+    display: none !important;
+  }
+
+  body.print-both #split-pane-left {
+    width: 44% !important;
+    flex-shrink: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  body.print-both #split-pane-right {
+    width: 56% !important;
+    max-height: none !important;
+    overflow: hidden !important;
+  }
+
+  /* Hide secondary columns in side-by-side mode so table fits smoothly */
+  body.print-both th:nth-child(2), /* Tipo */
+  body.print-both td:nth-child(2),
+  body.print-both th:nth-child(8), /* Predecesoras */
+  body.print-both td:nth-child(8),
+  body.print-both th:nth-child(9), /* % Avance */
+  body.print-both td:nth-child(9) {
+    display: none !important;
+  }
+}
