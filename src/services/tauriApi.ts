@@ -69,8 +69,19 @@ export const tauriApi = {
     return await invoke<ProjectPayload>('import_project_xml', { path: selected });
   },
 
+  async updateCalendar(
+    calendar: import('../types/project').Calendar,
+    exceptions: import('../types/project').CalendarException[],
+  ): Promise<ProjectPayload> {
+    return await invoke<ProjectPayload>('update_calendar', { calendar, exceptions });
+  },
+
   async addTask(afterId?: number, name?: string): Promise<ProjectPayload> {
     return await invoke<ProjectPayload>('add_task', { afterId, name });
+  },
+
+  async addTasksBatch(tasks: { name: string; duration_hours?: number }[], afterId?: number): Promise<ProjectPayload> {
+    return await invoke<ProjectPayload>('add_tasks_batch', { tasks, afterId });
   },
 
   async updateTask(updated: Task): Promise<ProjectPayload> {
@@ -81,12 +92,28 @@ export const tauriApi = {
     return await invoke<ProjectPayload>('delete_task', { taskId });
   },
 
+  async deleteTasks(taskIds: number[]): Promise<ProjectPayload> {
+    return await invoke<ProjectPayload>('delete_tasks', { taskIds });
+  },
+
   async indentTask(taskId: number): Promise<ProjectPayload> {
     return await invoke<ProjectPayload>('indent_task', { taskId });
   },
 
+  async indentTasks(taskIds: number[]): Promise<ProjectPayload> {
+    return await invoke<ProjectPayload>('indent_tasks', { taskIds });
+  },
+
   async outdentTask(taskId: number): Promise<ProjectPayload> {
     return await invoke<ProjectPayload>('outdent_task', { taskId });
+  },
+
+  async outdentTasks(taskIds: number[]): Promise<ProjectPayload> {
+    return await invoke<ProjectPayload>('outdent_tasks', { taskIds });
+  },
+
+  async setTasksDuration(taskIds: number[], durationHours: number): Promise<ProjectPayload> {
+    return await invoke<ProjectPayload>('set_tasks_duration', { taskIds, durationHours });
   },
 
   async setTaskPredecessors(taskId: number, expr: string): Promise<ProjectPayload> {

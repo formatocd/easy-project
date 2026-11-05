@@ -1,16 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ChevronRight, ChevronDown, Diamond, FolderTree, CheckSquare } from 'lucide-react';
+import { ChevronRight, ChevronDown, Diamond, FolderTree, CheckSquare, Plus } from 'lucide-react';
 import { TaskDto, Task } from '../types/project';
 import { formatDateTime, formatDuration, parseDurationInput } from '../utils/formatters';
 
 interface TaskSheetProps {
   tasks: TaskDto[];
-  selectedTaskId: number | null;
+  selectedTaskIds: number[];
+  collapsedTaskIds: Set<number>;
   hoursPerDay: number;
-  onSelectTask: (taskId: number) => void;
+  onSelectTask: (taskId: number, e?: React.MouseEvent) => void;
+  onToggleCollapse: (taskId: number) => void;
+  onOpenTaskDetails: (taskId: number) => void;
   onUpdateTask: (task: Task) => void;
+  onSetTasksDuration: (taskIds: number[], hours: number) => void;
   onSetPredecessors: (taskId: number, expr: string) => void;
-  onAddTaskBelow: (taskId: number) => void;
+  onAddTask: (name?: string) => void;
+  onAddTasksBatch: (tasks: { name: string; duration_hours?: number }[]) => void;
   scrollRef?: React.RefObject<HTMLDivElement | null>;
   onScroll?: (e: React.UIEvent<HTMLDivElement>) => void;
 }
@@ -19,18 +24,25 @@ type EditableField = 'name' | 'duration' | 'predecessors' | 'percent';
 
 export const TaskSheet: React.FC<TaskSheetProps> = ({
   tasks,
-  selectedTaskId,
+  selectedTaskIds,
+  collapsedTaskIds,
   hoursPerDay,
   onSelectTask,
+  onToggleCollapse,
+  onOpenTaskDetails,
   onUpdateTask,
+  onSetTasksDuration,
   onSetPredecessors,
-  onAddTaskBelow,
+  onAddTask,
+  onAddTasksBatch,
   scrollRef,
   onScroll,
 }) => {
   const [editingCell, setEditingCell] = useState<{ id: number; field: EditableField } | null>(null);
   const [editValue, setEditValue] = useState<string>('');
+  const [quickTaskName, setQuickTaskName] = useState<string>('');
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const quickInputRef = useRef<HTMLInputElement | null>(null);
 
   // Focus input when editing starts
   useEffect(() => {
@@ -78,12 +90,17 @@ export const TaskSheet: React.FC<TaskSheetProps> = ({
       }
     } else if (field === 'duration') {
       const hours = parseDurationInput(trimmed, hoursPerDay);
-      if (hours !== null && hours !== task.duration_hours) {
-        onUpdateTask({
-          ...task,
-          duration_hours: hours,
-          is_milestone: hours === 0,
-        });
+      if (hours !== null) {
+        if (selectedTaskIds.length > 1 && selectedTaskIds.includes(task.id)) {
+          // Batch duration update for all selected tasks
+          onSetTasksDuration(selectedTaskIds, hours);
+        } else if (hours !== task.duration_hours) {
+          onUpdateTask({
+            ...task,
+            duration_hours: hours,
+            is_milestone: hours === 0,
+          });
+        }
       }
     } else if (field === 'predecessors') {
       if (trimmed !== task.predecessors_display) {
@@ -110,11 +127,63 @@ export const TaskSheet: React.FC<TaskSheetProps> = ({
     }
   };
 
+  // Clipboard paste handler (like ProjectLibre / MS Project / Excel)
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const text = e.clipboardData.getData('text');
+    if (!text) return;
+
+    const rawLines = text.split(/\r?\n/);
+    const lines = rawLines.map((l) => l.trim()).filter((l) => l.length > 0);
+
+    // If multiple lines or single line with tab separation (multi-column)
+    if (lines.length > 1 || (lines.length === 1 && lines[0].includes('\t'))) {
+      e.preventDefault();
+      const parsedTasks: { name: string; duration_hours?: number }[] = [];
+
+      for (const line of lines) {
+        if (line.includes('\t')) {
+          const cols = line.split('\t');
+          const name = cols[0].trim();
+          if (!name) continue;
+          let durationHours: number | undefined = undefined;
+          if (cols.length > 1 && cols[1].trim()) {
+            const parsed = parseDurationInput(cols[1], hoursPerDay);
+            if (parsed !== null) durationHours = parsed;
+          }
+          parsedTasks.push({ name, duration_hours: durationHours });
+        } else {
+          parsedTasks.push({ name: line });
+        }
+      }
+
+      if (parsedTasks.length > 0) {
+        onAddTasksBatch(parsedTasks);
+      }
+    }
+  };
+
+  const handleQuickAddSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const name = quickTaskName.trim();
+    if (name) {
+      onAddTask(name);
+      setQuickTaskName('');
+    } else {
+      onAddTask();
+    }
+    // Keep focus on input for fast repeated entry
+    setTimeout(() => {
+      quickInputRef.current?.focus();
+    }, 50);
+  };
+
   return (
     <div
       ref={scrollRef}
       onScroll={onScroll}
-      className="h-full overflow-auto bg-white dark:bg-neutral-950 text-neutral-800 dark:text-neutral-200 select-none text-xs border-r border-neutral-300 dark:border-neutral-800"
+      onPaste={handlePaste}
+      tabIndex={0}
+      className="h-full overflow-auto bg-white dark:bg-neutral-950 text-neutral-800 dark:text-neutral-200 select-none text-xs border-r border-neutral-300 dark:border-neutral-800 outline-none"
     >
       <table className="w-full border-collapse text-left table-fixed">
         <thead className="sticky top-0 bg-neutral-100 dark:bg-neutral-900 border-b border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400 font-semibold z-10 shadow-sm">
@@ -131,17 +200,43 @@ export const TaskSheet: React.FC<TaskSheetProps> = ({
           </tr>
         </thead>
         <tbody>
+          {/* Empty project initial guide banner */}
+          {tasks.length === 0 && (
+            <tr className="border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-900/30">
+              <td colSpan={9} className="text-center py-8 px-4">
+                <p className="text-sm font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
+                  El proyecto no tiene tareas todavía
+                </p>
+                <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-4 max-w-md mx-auto leading-relaxed">
+                  Escribe en la fila de abajo y pulsa <kbd className="px-1.5 py-0.5 rounded bg-neutral-200 dark:bg-neutral-800 font-mono text-[10px] text-neutral-700 dark:text-neutral-300">Enter</kbd>, pega un listado de tareas con <kbd className="px-1.5 py-0.5 rounded bg-neutral-200 dark:bg-neutral-800 font-mono text-[10px] text-neutral-700 dark:text-neutral-300">Ctrl+V</kbd>, o haz clic en:
+                </p>
+                <button
+                  type="button"
+                  onClick={() => onAddTask()}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-blue-600 text-white hover:bg-blue-700 font-medium text-xs shadow-xs transition"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Añadir primera tarea
+                </button>
+              </td>
+            </tr>
+          )}
+
+          {/* List of existing tasks */}
           {tasks.map((task) => {
-            const isSelected = selectedTaskId === task.id;
+            const isSelected = selectedTaskIds.includes(task.id);
             const isEditing = editingCell?.id === task.id;
+            const isCollapsed = collapsedTaskIds.has(task.id);
+            const isMultiSelected = isSelected && selectedTaskIds.length > 1;
 
             return (
               <tr
                 key={task.id}
-                onClick={() => onSelectTask(task.id)}
-                className={`border-b border-neutral-200 dark:border-neutral-800 transition cursor-pointer ${
+                onClick={(e) => onSelectTask(task.id, e)}
+                onDoubleClick={() => onOpenTaskDetails(task.id)}
+                className={`border-b border-neutral-200 dark:border-neutral-800 transition cursor-pointer select-none ${
                   isSelected
-                    ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-900 dark:text-blue-100 font-medium'
+                    ? 'bg-blue-100 dark:bg-blue-950/60 text-blue-950 dark:text-blue-100 font-medium'
                     : 'hover:bg-neutral-50 dark:hover:bg-neutral-900/60'
                 }`}
                 style={{ height: '32px' }}
@@ -162,87 +257,101 @@ export const TaskSheet: React.FC<TaskSheetProps> = ({
                   )}
                 </td>
 
-                {/* WBS Code */}
-                <td className="px-2 py-0 h-8 border-r border-neutral-200 dark:border-neutral-800 text-center align-middle text-neutral-500 dark:text-neutral-400 font-mono text-[11px]">
+                {/* WBS */}
+                <td className="px-1.5 py-0 h-8 border-r border-neutral-200 dark:border-neutral-800 text-center align-middle font-mono text-[11px] text-neutral-500 dark:text-neutral-400">
                   {task.wbs_code}
                 </td>
 
-                {/* Task Name (Indented) */}
+                {/* Task Name with Indentation & Collapse Toggle */}
                 <td
-                  className="px-2 py-0 h-8 border-r border-neutral-200 dark:border-neutral-800 truncate align-middle"
-                  onDoubleClick={() => startEditing(task, 'name')}
+                  className="px-2 py-0 h-8 border-r border-neutral-200 dark:border-neutral-800 align-middle truncate"
+                  style={{ paddingLeft: `${task.depth * 16 + 6}px` }}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    startEditing(task, 'name');
+                  }}
                 >
-                  <div className="flex items-center" style={{ paddingLeft: `${task.depth * 14}px` }}>
-                    {task.is_summary ? (
-                      <span className="font-semibold text-neutral-900 dark:text-neutral-100 flex items-center gap-1">
-                        <ChevronDown className="w-3 h-3 text-neutral-500 shrink-0" />
-                        {isEditing && editingCell?.field === 'name' ? (
-                          <input
-                            ref={inputRef}
-                            value={editValue}
-                            onChange={(e) => setEditValue(e.target.value)}
-                            onBlur={() => commitEdit(task)}
-                            onKeyDown={(e) => handleKeyDown(e, task)}
-                            className="w-full bg-white dark:bg-neutral-900 border border-blue-500 px-1 py-0.5 rounded text-xs outline-none"
-                          />
-                        ) : (
-                          <span className="truncate">{task.name}</span>
-                        )}
-                      </span>
-                    ) : (
-                      <div className="w-full truncate pl-3">
-                        {isEditing && editingCell?.field === 'name' ? (
-                          <input
-                            ref={inputRef}
-                            value={editValue}
-                            onChange={(e) => setEditValue(e.target.value)}
-                            onBlur={() => commitEdit(task)}
-                            onKeyDown={(e) => handleKeyDown(e, task)}
-                            className="w-full bg-white dark:bg-neutral-900 border border-blue-500 px-1 py-0.5 rounded text-xs outline-none"
-                          />
-                        ) : (
-                          <span className="truncate">{task.name}</span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </td>
-
-                {/* Duration */}
-                <td
-                  className={`px-2 py-0 h-8 border-r border-neutral-200 dark:border-neutral-800 text-right align-middle ${
-                    task.is_summary ? 'text-neutral-500 italic' : ''
-                  }`}
-                  onDoubleClick={() => startEditing(task, 'duration')}
-                >
-                  {isEditing && editingCell?.field === 'duration' ? (
+                  {isEditing && editingCell?.field === 'name' ? (
                     <input
                       ref={inputRef}
                       value={editValue}
                       onChange={(e) => setEditValue(e.target.value)}
                       onBlur={() => commitEdit(task)}
                       onKeyDown={(e) => handleKeyDown(e, task)}
-                      className="w-full bg-white dark:bg-neutral-900 border border-blue-500 px-1 py-0.5 rounded text-xs text-right outline-none"
+                      className="w-full bg-white dark:bg-neutral-900 border border-blue-500 px-1 py-0.5 rounded text-xs outline-none"
                     />
                   ) : (
-                    formatDuration(task.duration_hours, hoursPerDay)
+                    <div className="flex items-center space-x-1 truncate">
+                      {task.has_children ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleCollapse(task.id);
+                          }}
+                          className="p-0.5 rounded hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100 shrink-0 transition"
+                          title={isCollapsed ? 'Expandir sub-tareas' : 'Contraer sub-tareas'}
+                        >
+                          {isCollapsed ? (
+                            <ChevronRight className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                          ) : (
+                            <ChevronDown className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      ) : (
+                        <span className="w-4 shrink-0" />
+                      )}
+                      <span className={task.is_summary ? 'font-bold' : ''}>
+                        {task.name}
+                      </span>
+                    </div>
+                  )}
+                </td>
+
+                {/* Duration */}
+                <td
+                  className="px-2 py-0 h-8 border-r border-neutral-200 dark:border-neutral-800 text-right align-middle font-mono text-[11px]"
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    startEditing(task, 'duration');
+                  }}
+                  title={isMultiSelected ? `Doble clic para cambiar duración de las ${selectedTaskIds.length} tareas seleccionadas` : undefined}
+                >
+                  {isEditing && editingCell?.field === 'duration' ? (
+                    <div className="relative">
+                      <input
+                        ref={inputRef}
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onBlur={() => commitEdit(task)}
+                        onKeyDown={(e) => handleKeyDown(e, task)}
+                        className="w-full bg-white dark:bg-neutral-900 border border-blue-500 px-1 py-0.5 rounded text-xs text-right outline-none"
+                      />
+                    </div>
+                  ) : (
+                    <span className={task.is_summary ? 'font-semibold italic' : ''}>
+                      {formatDuration(task.duration_hours, hoursPerDay)}
+                    </span>
                   )}
                 </td>
 
                 {/* Start Date */}
-                <td className="px-2 py-0 h-8 border-r border-neutral-200 dark:border-neutral-800 truncate align-middle text-[11px] text-neutral-600 dark:text-neutral-300">
+                <td className="px-2 py-0 h-8 border-r border-neutral-200 dark:border-neutral-800 align-middle text-neutral-600 dark:text-neutral-400 font-mono text-[11px]">
                   {formatDateTime(task.start_date)}
                 </td>
 
                 {/* Finish Date */}
-                <td className="px-2 py-0 h-8 border-r border-neutral-200 dark:border-neutral-800 truncate align-middle text-[11px] text-neutral-600 dark:text-neutral-300">
+                <td className="px-2 py-0 h-8 border-r border-neutral-200 dark:border-neutral-800 align-middle text-neutral-600 dark:text-neutral-400 font-mono text-[11px]">
                   {formatDateTime(task.finish_date)}
                 </td>
 
                 {/* Predecessors */}
                 <td
-                  className="px-2 py-0 h-8 border-r border-neutral-200 dark:border-neutral-800 truncate align-middle"
-                  onDoubleClick={() => startEditing(task, 'predecessors')}
+                  className="px-2 py-0 h-8 border-r border-neutral-200 dark:border-neutral-800 align-middle font-mono text-[11px]"
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    startEditing(task, 'predecessors');
+                  }}
                 >
                   {isEditing && editingCell?.field === 'predecessors' ? (
                     <input
@@ -254,7 +363,7 @@ export const TaskSheet: React.FC<TaskSheetProps> = ({
                       className="w-full bg-white dark:bg-neutral-900 border border-blue-500 px-1 py-0.5 rounded text-xs outline-none"
                     />
                   ) : (
-                    <span className="font-mono text-[11px] text-blue-600 dark:text-blue-400">
+                    <span className="text-neutral-700 dark:text-neutral-300">
                       {task.predecessors_display || '-'}
                     </span>
                   )}
@@ -263,7 +372,10 @@ export const TaskSheet: React.FC<TaskSheetProps> = ({
                 {/* Percent Complete */}
                 <td
                   className="px-2 py-0 h-8 text-right align-middle"
-                  onDoubleClick={() => startEditing(task, 'percent')}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    startEditing(task, 'percent');
+                  }}
                 >
                   {isEditing && editingCell?.field === 'percent' ? (
                     <input
@@ -281,6 +393,50 @@ export const TaskSheet: React.FC<TaskSheetProps> = ({
               </tr>
             );
           })}
+
+          {/* Quick Add Row (Always present at the bottom, like in ProjectLibre / MS Project) */}
+          <tr
+            className="border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50/60 dark:bg-neutral-900/30 hover:bg-neutral-100/70 dark:hover:bg-neutral-900/60 transition cursor-text group"
+            style={{ height: '32px' }}
+            onClick={() => quickInputRef.current?.focus()}
+          >
+            <td className="px-2 py-0 h-8 border-r border-neutral-200 dark:border-neutral-800 text-center align-middle text-neutral-400 text-[11px] font-mono">
+              *
+            </td>
+            <td className="px-1 py-0 h-8 border-r border-neutral-200 dark:border-neutral-800 text-center align-middle">
+              <Plus className="w-3.5 h-3.5 text-blue-500 mx-auto group-hover:scale-110 transition" />
+            </td>
+            <td className="px-1 py-0 h-8 border-r border-neutral-200 dark:border-neutral-800 text-center align-middle text-neutral-400">
+              -
+            </td>
+            <td className="px-2 py-0 h-8 border-r border-neutral-200 dark:border-neutral-800 align-middle">
+              <form onSubmit={handleQuickAddSubmit} className="w-full flex items-center">
+                <input
+                  ref={quickInputRef}
+                  type="text"
+                  value={quickTaskName}
+                  onChange={(e) => setQuickTaskName(e.target.value)}
+                  placeholder={tasks.length === 0 ? "Escribe un nombre de tarea y pulsa Enter..." : "Nueva tarea... (pulsa Enter para agregar)"}
+                  className="w-full bg-transparent border-none outline-none text-xs text-neutral-800 dark:text-neutral-200 placeholder-neutral-400 dark:placeholder-neutral-500 focus:placeholder-transparent"
+                />
+              </form>
+            </td>
+            <td className="px-2 py-0 h-8 border-r border-neutral-200 dark:border-neutral-800 text-right align-middle text-neutral-400 font-mono text-[11px]">
+              1d
+            </td>
+            <td className="px-2 py-0 h-8 border-r border-neutral-200 dark:border-neutral-800 align-middle text-neutral-400">
+              -
+            </td>
+            <td className="px-2 py-0 h-8 border-r border-neutral-200 dark:border-neutral-800 align-middle text-neutral-400">
+              -
+            </td>
+            <td className="px-2 py-0 h-8 border-r border-neutral-200 dark:border-neutral-800 align-middle text-neutral-400">
+              -
+            </td>
+            <td className="px-2 py-0 h-8 text-right align-middle text-neutral-400">
+              0%
+            </td>
+          </tr>
         </tbody>
       </table>
     </div>

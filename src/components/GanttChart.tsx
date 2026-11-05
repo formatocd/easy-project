@@ -165,7 +165,6 @@ export const GanttChart: React.FC<GanttChartProps> = ({
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!dragging) return;
-    const deltaX = e.clientX - dragging.startX;
 
     if (dragging.type === 'link') {
       if (containerRef.current) {
@@ -445,6 +444,16 @@ export const GanttChart: React.FC<GanttChartProps> = ({
           })}
         </div>
       </div>
+
+      {/* Hover Tooltip */}
+      {tooltip && (
+        <div
+          style={{ left: `${tooltip.x}px`, top: `${tooltip.y}px` }}
+          className="fixed z-50 pointer-events-none bg-neutral-900 text-white text-[11px] px-2.5 py-1.5 rounded shadow-xl border border-neutral-700 whitespace-pre-line"
+        >
+          {tooltip.text}
+        </div>
+      )}
     </div>
   );
 };

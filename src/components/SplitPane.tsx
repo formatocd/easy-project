@@ -61,7 +61,8 @@ export const SplitPane: React.FC<SplitPaneProps> = ({
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const delta = moveEvent.clientX - startX;
-      const newWidth = Math.max(minLeftWidth, startWidth + delta);
+      const maxLeft = window.innerWidth - minRightWidth;
+      const newWidth = Math.min(maxLeft, Math.max(minLeftWidth, startWidth + delta));
       setLeftWidth(newWidth);
     };
 

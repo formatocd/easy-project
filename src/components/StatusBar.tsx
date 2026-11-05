@@ -3,33 +3,37 @@ import { TaskDto } from '../types/project';
 
 interface StatusBarProps {
   tasks: TaskDto[];
-  selectedTaskId: number | null;
+  selectedTaskIds: number[];
   scheduleFrom: string;
   calculationMs: number;
 }
 
 export const StatusBar: React.FC<StatusBarProps> = ({
   tasks,
-  selectedTaskId,
+  selectedTaskIds,
   scheduleFrom,
   calculationMs,
 }) => {
-  const selectedTask = tasks.find((t) => t.id === selectedTaskId);
+  const selectedTask = selectedTaskIds.length === 1 ? tasks.find((t) => t.id === selectedTaskIds[0]) : null;
 
   return (
-    <footer className="h-6 border-t border-neutral-300 dark:border-neutral-800 bg-neutral-100 dark:bg-neutral-900 px-3 flex items-center justify-between text-[11px] text-neutral-600 dark:text-neutral-400 select-none">
-      <div className="flex items-center space-x-4">
-        <span>
+    <footer className="h-6 border-t border-neutral-300 dark:border-neutral-800 bg-neutral-100 dark:bg-neutral-900 px-3 flex items-center justify-between text-[11px] text-neutral-600 dark:text-neutral-400 select-none whitespace-nowrap overflow-hidden gap-2">
+      <div className="flex items-center space-x-4 min-w-0 truncate">
+        <span className="shrink-0">
           Total tareas: <strong>{tasks.length}</strong>
         </span>
-        {selectedTask && (
-          <span>
+        {selectedTaskIds.length > 1 ? (
+          <span className="truncate text-blue-600 dark:text-blue-400 font-medium">
+            Seleccionadas: <strong>{selectedTaskIds.length} tareas</strong>
+          </span>
+        ) : selectedTask ? (
+          <span className="truncate">
             Seleccionada: <strong>#{selectedTask.id}</strong> {selectedTask.name} ({selectedTask.duration_hours}h)
           </span>
-        )}
+        ) : null}
       </div>
 
-      <div className="flex items-center space-x-4">
+      <div className="flex items-center space-x-4 shrink-0">
         <span>
           Programación:{' '}
           <strong>{scheduleFrom === 'START' ? 'Hacia adelante' : 'Hacia atrás'}</strong>

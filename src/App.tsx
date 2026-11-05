@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { ActiveView, Dependency, ProjectPayload, Task, ZoomLevel } from './types/project';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { ActiveView, Calendar, CalendarException, Dependency, ProjectPayload, Task, TaskDto, ZoomLevel } from './types/project';
 import { tauriApi } from './services/tauriApi';
 import { Toolbar } from './components/Toolbar';
 import { TaskSheet } from './components/TaskSheet';
@@ -10,10 +10,12 @@ import { StatusBar } from './components/StatusBar';
 import { ProjectSettingsModal } from './components/ProjectSettingsModal';
 import { TaskDetailsModal } from './components/TaskDetailsModal';
 import { ExportPdfModal } from './components/ExportPdfModal';
+import { CalendarSettingsModal } from './components/CalendarSettingsModal';
 
 export const App: React.FC = () => {
   const [projectPayload, setProjectPayload] = useState<ProjectPayload | null>(null);
-  const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<number[]>([]);
+  const [collapsedTaskIds, setCollapsedTaskIds] = useState<Set<number>>(new Set());
   const [activeView, setActiveView] = useState<ActiveView>('GANTT');
   const [zoomLevel, setZoomLevel] = useState<ZoomLevel>('DAYS');
   const [darkMode, setDarkMode] = useState<boolean>(() => {
@@ -24,6 +26,9 @@ export const App: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isTaskDetailsOpen, setIsTaskDetailsOpen] = useState(false);
   const [isExportPdfOpen, setIsExportPdfOpen] = useState(false);
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+
+  const selectedTaskId = selectedTaskIds[0] ?? null;
 
   // Sync dark class on body
   useEffect(() => {
@@ -39,46 +44,95 @@ export const App: React.FC = () => {
     try {
       const payload = await tauriApi.getProject();
       setProjectPayload(payload);
-      if (payload.task_dtos.length > 0 && selectedTaskId === null) {
-        setSelectedTaskId(payload.task_dtos[0].id);
+      if (payload.task_dtos.length > 0 && selectedTaskIds.length === 0) {
+        setSelectedTaskIds([payload.task_dtos[0].id]);
       }
     } catch (err: any) {
       console.error(err);
     }
-  }, [selectedTaskId]);
+  }, [selectedTaskIds.length]);
 
   useEffect(() => {
     loadProject();
   }, [loadProject]);
 
-  // Keyboard Shortcuts (Ctrl+S, Ctrl+Z, Ctrl+Y, F2)
-  useEffect(() => {
-    const handleKeyDown = async (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-        e.preventDefault();
-        handleSave();
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
-        e.preventDefault();
-        handleUndo();
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
-        e.preventDefault();
-        handleRedo();
-      } else if (e.key === 'F2' && selectedTaskId !== null) {
-        e.preventDefault();
-        setIsTaskDetailsOpen(true);
+  // Toggle tree collapse on parent task
+  const toggleCollapse = useCallback((taskId: number) => {
+    setCollapsedTaskIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(taskId)) {
+        next.delete(taskId);
+      } else {
+        next.add(taskId);
       }
-    };
+      return next;
+    });
+  }, []);
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [projectPayload, selectedTaskId]);
+  // Compute visible tasks respecting hierarchical collapse
+  const visibleTaskDtos = useMemo(() => {
+    if (!projectPayload) return [];
+    if (collapsedTaskIds.size === 0) return projectPayload.task_dtos;
+
+    const idToTask = new Map<number, TaskDto>();
+    for (const t of projectPayload.task_dtos) {
+      idToTask.set(t.id, t);
+    }
+
+    return projectPayload.task_dtos.filter((t) => {
+      let currParentId = t.parent_id;
+      while (currParentId !== null && currParentId !== undefined) {
+        if (collapsedTaskIds.has(currParentId)) {
+          return false;
+        }
+        const parentTask = idToTask.get(currParentId);
+        currParentId = parentTask ? parentTask.parent_id : null;
+      }
+      return true;
+    });
+  }, [projectPayload, collapsedTaskIds]);
+
+  // Handle multi-selection with Shift and Ctrl
+  const handleSelectTask = useCallback(
+    (id: number, e?: React.MouseEvent) => {
+      if (e?.ctrlKey || e?.metaKey) {
+        // Toggle selection
+        setSelectedTaskIds((prev) =>
+          prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+        );
+      } else if (e?.shiftKey && selectedTaskIds.length > 0 && projectPayload) {
+        // Range selection
+        const allIds = visibleTaskDtos.map((t) => t.id);
+        const lastId = selectedTaskIds[selectedTaskIds.length - 1];
+        const lastIdx = allIds.indexOf(lastId);
+        const currIdx = allIds.indexOf(id);
+        if (lastIdx !== -1 && currIdx !== -1) {
+          const start = Math.min(lastIdx, currIdx);
+          const end = Math.max(lastIdx, currIdx);
+          const range = allIds.slice(start, end + 1);
+          setSelectedTaskIds(Array.from(new Set([...selectedTaskIds, ...range])));
+        } else {
+          setSelectedTaskIds([id]);
+        }
+      } else {
+        // Normal single select
+        setSelectedTaskIds([id]);
+      }
+    },
+    [selectedTaskIds, visibleTaskDtos, projectPayload]
+  );
+
+  const handleOpenTaskDetails = useCallback((taskId: number) => {
+    setSelectedTaskIds([taskId]);
+    setIsTaskDetailsOpen(true);
+  }, []);
 
   // Actions
   const handleNew = async () => {
     try {
       const payload = await tauriApi.newProject();
       setProjectPayload(payload);
-      setSelectedTaskId(payload.task_dtos[0]?.id ?? null);
+      setSelectedTaskIds(payload.task_dtos[0] ? [payload.task_dtos[0].id] : []);
     } catch (err: any) {
       alert(`Error: ${err}`);
     }
@@ -89,7 +143,7 @@ export const App: React.FC = () => {
       const payload = await tauriApi.openProjectDialog();
       if (payload) {
         setProjectPayload(payload);
-        setSelectedTaskId(payload.task_dtos[0]?.id ?? null);
+        setSelectedTaskIds(payload.task_dtos[0] ? [payload.task_dtos[0].id] : []);
       }
     } catch (err: any) {
       alert(`Error al abrir: ${err}`);
@@ -112,9 +166,10 @@ export const App: React.FC = () => {
   };
 
   const handleSaveAs = async () => {
+    if (!projectPayload) return;
     try {
       const savedPath = await tauriApi.saveProjectAsDialog();
-      if (savedPath && projectPayload) {
+      if (savedPath) {
         setProjectPayload({
           ...projectPayload,
           data: { ...projectPayload.data, file_path: savedPath },
@@ -127,10 +182,8 @@ export const App: React.FC = () => {
 
   const handleExportCsv = async () => {
     try {
-      const savedPath = await tauriApi.exportCsvDialog();
-      if (savedPath) {
-        alert(`Exportación a CSV completada con éxito:\n${savedPath}`);
-      }
+      const res = await tauriApi.exportCsvDialog();
+      if (res) alert(`Archivo CSV exportado exitosamente a:\n${res}`);
     } catch (err: any) {
       alert(`Error al exportar CSV: ${err}`);
     }
@@ -138,10 +191,8 @@ export const App: React.FC = () => {
 
   const handleExportExcel = async () => {
     try {
-      const savedPath = await tauriApi.exportExcelDialog();
-      if (savedPath) {
-        alert(`Exportación a Excel (.xlsx) completada con éxito:\n${savedPath}`);
-      }
+      const res = await tauriApi.exportExcelDialog();
+      if (res) alert(`Archivo Excel (.xlsx) exportado exitosamente a:\n${res}`);
     } catch (err: any) {
       alert(`Error al exportar Excel: ${err}`);
     }
@@ -152,8 +203,8 @@ export const App: React.FC = () => {
       const payload = await tauriApi.importXmlDialog();
       if (payload) {
         setProjectPayload(payload);
-        setSelectedTaskId(payload.task_dtos[0]?.id ?? null);
-        alert(`Proyecto importado con éxito (${payload.task_dtos.length} tareas cargadas).`);
+        setSelectedTaskIds(payload.task_dtos[0] ? [payload.task_dtos[0].id] : []);
+        alert('Proyecto MS Project XML importado correctamente.');
       }
     } catch (err: any) {
       alert(`Error al importar XML: ${err}`);
@@ -180,45 +231,66 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleAddTask = async () => {
+  const handleAddTask = async (name?: string) => {
     try {
-      const payload = await tauriApi.addTask(selectedTaskId ?? undefined);
+      const payload = await tauriApi.addTask(selectedTaskId ?? undefined, name);
       setProjectPayload(payload);
       const last = payload.task_dtos[payload.task_dtos.length - 1];
-      if (last) setSelectedTaskId(last.id);
+      if (last) setSelectedTaskIds([last.id]);
     } catch (err: any) {
-      alert(`Error: ${err}`);
+      alert(`Error al añadir tarea: ${err}`);
+    }
+  };
+
+  const handleAddTasksBatch = async (taskInputs: { name: string; duration_hours?: number }[]) => {
+    try {
+      const payload = await tauriApi.addTasksBatch(taskInputs, selectedTaskId ?? undefined);
+      setProjectPayload(payload);
+      if (payload.task_dtos.length > 0) {
+        setSelectedTaskIds([payload.task_dtos[payload.task_dtos.length - 1].id]);
+      }
+    } catch (err: any) {
+      alert(`Error al importar tareas: ${err}`);
     }
   };
 
   const handleDeleteTask = async () => {
-    if (selectedTaskId === null) return;
+    if (selectedTaskIds.length === 0) return;
     try {
-      const payload = await tauriApi.deleteTask(selectedTaskId);
+      const payload = await tauriApi.deleteTasks(selectedTaskIds);
       setProjectPayload(payload);
-      setSelectedTaskId(payload.task_dtos[0]?.id ?? null);
+      setSelectedTaskIds(payload.task_dtos[0] ? [payload.task_dtos[0].id] : []);
     } catch (err: any) {
-      alert(`Error: ${err}`);
+      alert(`Error al eliminar: ${err}`);
     }
   };
 
   const handleIndentTask = async () => {
-    if (selectedTaskId === null) return;
+    if (selectedTaskIds.length === 0) return;
     try {
-      const payload = await tauriApi.indentTask(selectedTaskId);
+      const payload = await tauriApi.indentTasks(selectedTaskIds);
       setProjectPayload(payload);
     } catch (err: any) {
-      alert(`Error: ${err}`);
+      alert(`Error al indentar: ${err}`);
     }
   };
 
   const handleOutdentTask = async () => {
-    if (selectedTaskId === null) return;
+    if (selectedTaskIds.length === 0) return;
     try {
-      const payload = await tauriApi.outdentTask(selectedTaskId);
+      const payload = await tauriApi.outdentTasks(selectedTaskIds);
       setProjectPayload(payload);
     } catch (err: any) {
-      alert(`Error: ${err}`);
+      alert(`Error al desindentar: ${err}`);
+    }
+  };
+
+  const handleSetTasksDuration = async (taskIds: number[], hours: number) => {
+    try {
+      const payload = await tauriApi.setTasksDuration(taskIds, hours);
+      setProjectPayload(payload);
+    } catch (err: any) {
+      alert(`Error al cambiar duración: ${err}`);
     }
   };
 
@@ -253,120 +325,165 @@ export const App: React.FC = () => {
     try {
       const payload = await tauriApi.saveBaseline();
       setProjectPayload(payload);
+      alert('Línea base guardada correctamente.');
     } catch (err: any) {
-      alert(`Error: ${err}`);
+      alert(`Error de línea base: ${err}`);
     }
   };
 
   const handleClearBaseline = async () => {
+    if (!confirm('¿Deseas borrar la línea base actual del proyecto?')) return;
     try {
       const payload = await tauriApi.clearBaseline();
       setProjectPayload(payload);
     } catch (err: any) {
-      alert(`Error: ${err}`);
+      alert(`Error al borrar línea base: ${err}`);
     }
   };
 
-  const handleSaveProjectSettings = async (updatedMeta: any) => {
+  // Keyboard Shortcuts (Ctrl+S, Ctrl+Z, Ctrl+Y, F2, Delete)
+  useEffect(() => {
+    const handleKeyDown = async (e: KeyboardEvent) => {
+      const isInput = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        handleSave();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        handleUndo();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        handleRedo();
+      } else if (e.key === 'F2' && selectedTaskId !== null) {
+        e.preventDefault();
+        setIsTaskDetailsOpen(true);
+      } else if (e.key === 'Delete' && selectedTaskIds.length > 0 && !isInput) {
+        e.preventDefault();
+        handleDeleteTask();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [projectPayload, selectedTaskIds, selectedTaskId]);
+
+  const handleSaveProjectSettings = async (settings: {
+    name: string;
+    schedule_from: 'START' | 'FINISH';
+    project_start_date: string;
+    hours_per_day: number;
+    hours_per_week: number;
+  }) => {
     if (!projectPayload) return;
     try {
-      // Re-save meta and recalculate
-      const updated = {
-        ...projectPayload.data,
-        meta: updatedMeta,
+      const updatedMeta = {
+        ...projectPayload.data.meta,
+        ...settings,
       };
-      // We can update task start dates or trigger recalculate
-      const payload = await tauriApi.updateTask(projectPayload.data.tasks[0]);
+      const updatedCalendar = {
+        ...projectPayload.data.calendar,
+        hours_per_day: settings.hours_per_day,
+      };
+      const payload = await tauriApi.updateCalendar(updatedCalendar, projectPayload.data.exceptions);
       setProjectPayload({
         ...payload,
-        data: { ...payload.data, meta: updatedMeta },
+        data: {
+          ...payload.data,
+          meta: updatedMeta,
+        },
       });
+      setIsSettingsOpen(false);
     } catch (err: any) {
-      console.warn(err);
+      alert(`Error al guardar configuración: ${err}`);
     }
   };
 
-  const handleSaveTaskDetails = async (updatedTask: Task, updatedPredecessors: Dependency[]) => {
+  const handleSaveCalendar = async (
+    calendar: Calendar,
+    exceptions: CalendarException[],
+  ) => {
     try {
-      // 1. Update task
-      let payload = await tauriApi.updateTask(updatedTask);
-      // 2. Format predecessors shorthand
-      const expr = updatedPredecessors
-        .map((d) => d.predecessor_id)
-        .join(', ');
-      payload = await tauriApi.setTaskPredecessors(updatedTask.id, expr);
+      const payload = await tauriApi.updateCalendar(calendar, exceptions);
       setProjectPayload(payload);
+      setIsCalendarOpen(false);
     } catch (err: any) {
-      alert(`Error: ${err}`);
+      alert(`Error al guardar calendario: ${err}`);
     }
   };
 
-  // Graphical Exports (PNG / SVG / PDF)
+  const handleSaveTaskDetails = (task: Task) => {
+    handleUpdateTask(task);
+  };
+
   const handleExportPng = () => {
-    const el = document.getElementById('gantt-canvas-container');
-    if (!el) return;
-    window.print();
+    const svg = document.getElementById('gantt-svg-root');
+    if (!svg) return;
+    const svgData = new XMLSerializer().serializeToString(svg);
+    const canvas = document.createElement('canvas');
+    const svgSize = svg.getBoundingClientRect();
+    canvas.width = svgSize.width * 2;
+    canvas.height = svgSize.height * 2;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const img = new Image();
+    img.onload = () => {
+      ctx.fillStyle = darkMode ? '#0a0a0a' : '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const a = document.createElement('a');
+      a.download = `Gantt_${projectPayload?.data.meta.name || 'Proyecto'}.png`;
+      a.href = canvas.toDataURL('image/png');
+      a.click();
+    };
+    img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
   };
 
   const handleExportSvg = () => {
-    const svgEl = document.querySelector('svg');
-    if (!svgEl) return;
-    const serializer = new XMLSerializer();
-    const source = serializer.serializeToString(svgEl);
-    const blob = new Blob([source], { type: 'image/svg+xml;charset=utf-8' });
+    const svg = document.getElementById('gantt-svg-root');
+    if (!svg) return;
+    const svgData = new XMLSerializer().serializeToString(svg);
+    const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
+    a.download = `Gantt_${projectPayload?.data.meta.name || 'Proyecto'}.svg`;
     a.href = url;
-    a.download = `${projectPayload?.data.meta.name || 'Gantt'}.svg`;
     a.click();
-    URL.revokeObjectURL(url);
   };
 
-  const handlePrintPdf = (config: {
-    content: 'both' | 'table' | 'gantt';
-    orientation: 'landscape' | 'portrait';
-    paper: string;
-  }) => {
+  const handlePrintPdf = (mode: 'ALL' | 'TABLE' | 'GANTT') => {
     setIsExportPdfOpen(false);
 
-    document.body.classList.remove('print-table-only', 'print-gantt-only', 'print-both');
-    if (config.content === 'table') {
-      document.body.classList.add('print-table-only');
-    } else if (config.content === 'gantt') {
-      document.body.classList.add('print-gantt-only');
+    document.body.classList.remove('print-mode-table', 'print-mode-gantt', 'print-mode-all');
+    if (mode === 'TABLE') {
+      document.body.classList.add('print-mode-table');
+    } else if (mode === 'GANTT') {
+      document.body.classList.add('print-mode-gantt');
     } else {
-      document.body.classList.add('print-both');
+      document.body.classList.add('print-mode-all');
     }
-
-    let styleEl = document.getElementById('print-page-style');
-    if (!styleEl) {
-      styleEl = document.createElement('style');
-      styleEl.id = 'print-page-style';
-      document.head.appendChild(styleEl);
-    }
-    styleEl.innerHTML = `@page { size: ${config.paper} ${config.orientation}; margin: 10mm; }`;
 
     setTimeout(() => {
       window.print();
-      document.body.classList.remove('print-table-only', 'print-gantt-only', 'print-both');
     }, 200);
   };
 
   if (!projectPayload) {
     return (
-      <div className="h-screen w-screen flex items-center justify-center bg-neutral-100 dark:bg-neutral-900 text-neutral-800 dark:text-neutral-200">
-        <div className="flex flex-col items-center space-y-2">
-          <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
-          <span className="text-xs font-medium">Iniciando Easy Project...</span>
+      <div className="flex h-screen w-screen items-center justify-center bg-neutral-900 text-neutral-200">
+        <div className="flex flex-col items-center space-y-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
+          <p className="text-sm font-medium">Cargando motor de Easy Project...</p>
         </div>
       </div>
     );
   }
 
-  const selectedTask = projectPayload.task_dtos.find((t) => t.id === selectedTaskId) || null;
+  const selectedTask = visibleTaskDtos.find((t) => t.id === selectedTaskId) || projectPayload.task_dtos.find((t) => t.id === selectedTaskId) || null;
 
   return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden bg-neutral-100 dark:bg-neutral-950 text-neutral-900 dark:text-neutral-100 font-sans">
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-white dark:bg-neutral-950 font-sans">
       {/* Top Application Ribbon */}
       <Toolbar
         projectName={projectPayload.data.meta.name}
@@ -377,7 +494,7 @@ export const App: React.FC = () => {
         activeView={activeView}
         zoomLevel={zoomLevel}
         darkMode={darkMode}
-        hasSelectedTask={selectedTaskId !== null}
+        hasSelectedTask={selectedTaskIds.length > 0}
         onNew={handleNew}
         onOpen={handleOpen}
         onSave={handleSave}
@@ -387,6 +504,7 @@ export const App: React.FC = () => {
         onImportXml={handleImportXml}
         onOpenPdfModal={() => setIsExportPdfOpen(true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenCalendarModal={() => setIsCalendarOpen(true)}
         onUndo={handleUndo}
         onRedo={handleRedo}
         onAddTask={handleAddTask}
@@ -407,38 +525,31 @@ export const App: React.FC = () => {
             initialLeftWidth={520}
             left={({ scrollRef, onScroll }) => (
               <TaskSheet
-                tasks={projectPayload.task_dtos}
-                selectedTaskId={selectedTaskId}
+                tasks={visibleTaskDtos}
+                selectedTaskIds={selectedTaskIds}
+                collapsedTaskIds={collapsedTaskIds}
                 hoursPerDay={projectPayload.data.meta.hours_per_day}
-                onSelectTask={(id) => {
-                  if (selectedTaskId === id) {
-                    setIsTaskDetailsOpen(true);
-                  } else {
-                    setSelectedTaskId(id);
-                  }
-                }}
+                onSelectTask={handleSelectTask}
+                onToggleCollapse={toggleCollapse}
+                onOpenTaskDetails={handleOpenTaskDetails}
                 onUpdateTask={handleUpdateTask}
+                onSetTasksDuration={handleSetTasksDuration}
                 onSetPredecessors={handleSetPredecessors}
-                onAddTaskBelow={handleAddTask}
+                onAddTask={handleAddTask}
+                onAddTasksBatch={handleAddTasksBatch}
                 scrollRef={scrollRef}
                 onScroll={onScroll}
               />
             )}
             right={({ scrollRef, onScroll }) => (
               <GanttChart
-                tasks={projectPayload.task_dtos}
+                tasks={visibleTaskDtos}
                 dependencies={projectPayload.data.dependencies}
                 zoomLevel={zoomLevel}
                 selectedTaskId={selectedTaskId}
                 hoursPerDay={projectPayload.data.meta.hours_per_day}
                 projectStartDate={projectPayload.data.meta.project_start_date}
-                onSelectTask={(id) => {
-                  if (selectedTaskId === id) {
-                    setIsTaskDetailsOpen(true);
-                  } else {
-                    setSelectedTaskId(id);
-                  }
-                }}
+                onSelectTask={(id) => handleSelectTask(id)}
                 onUpdateTask={handleUpdateTask}
                 onAddDependency={handleAddDependency}
                 scrollRef={scrollRef}
@@ -448,17 +559,17 @@ export const App: React.FC = () => {
           />
         ) : (
           <CalendarView
-            tasks={projectPayload.task_dtos}
+            tasks={visibleTaskDtos}
             selectedTaskId={selectedTaskId}
-            onSelectTask={setSelectedTaskId}
+            onSelectTask={(id) => handleSelectTask(id)}
           />
         )}
       </main>
 
       {/* Bottom Status Bar */}
       <StatusBar
-        tasks={projectPayload.task_dtos}
-        selectedTaskId={selectedTaskId}
+        tasks={visibleTaskDtos}
+        selectedTaskIds={selectedTaskIds}
         scheduleFrom={projectPayload.data.meta.schedule_from}
         calculationMs={projectPayload.calculation_ms}
       />
@@ -487,6 +598,14 @@ export const App: React.FC = () => {
         onExportPng={handleExportPng}
         onExportSvg={handleExportSvg}
         onPrintPdf={handlePrintPdf}
+      />
+
+      <CalendarSettingsModal
+        isOpen={isCalendarOpen}
+        calendar={projectPayload.data.calendar}
+        exceptions={projectPayload.data.exceptions}
+        onClose={() => setIsCalendarOpen(false)}
+        onSave={handleSaveCalendar}
       />
     </div>
   );

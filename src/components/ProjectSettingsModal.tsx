@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Settings, Calendar, Clock, ArrowRightLeft } from 'lucide-react';
+import { X, Settings } from 'lucide-react';
 import { ProjectMeta, ScheduleFrom } from '../types/project';
 import { formatDateTime } from '../utils/formatters';
 

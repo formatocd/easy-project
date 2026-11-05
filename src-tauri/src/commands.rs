@@ -199,6 +199,24 @@ pub fn import_project_xml(state: State<AppState>, path: String) -> Result<Projec
 }
 
 #[tauri::command]
+pub fn update_calendar(
+    state: State<AppState>,
+    calendar: crate::models::calendar::Calendar,
+    exceptions: Vec<crate::models::calendar::CalendarException>,
+) -> Result<ProjectPayload, String> {
+    let mut data = state.current.lock().unwrap();
+    state.push_undo(&data);
+
+    data.calendar = calendar;
+    data.exceptions = exceptions;
+
+    let res = Scheduler::recalculate(&mut data);
+    let can_undo = !state.undo_stack.lock().unwrap().is_empty();
+    let can_redo = !state.redo_stack.lock().unwrap().is_empty();
+    Ok(build_payload(&data, can_undo, can_redo, res.elapsed_ms))
+}
+
+#[tauri::command]
 pub fn update_task(state: State<AppState>, updated: Task) -> Result<ProjectPayload, String> {
     let mut data = state.current.lock().unwrap();
     state.push_undo(&data);
@@ -267,13 +285,100 @@ pub fn add_task(
     Ok(build_payload(&data, can_undo, can_redo, res.elapsed_ms))
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NewTaskInput {
+    pub name: String,
+    pub duration_hours: Option<f64>,
+}
+
 #[tauri::command]
-pub fn delete_task(state: State<AppState>, task_id: i64) -> Result<ProjectPayload, String> {
+pub fn add_tasks_batch(
+    state: State<AppState>,
+    tasks: Vec<NewTaskInput>,
+    after_id: Option<i64>,
+) -> Result<ProjectPayload, String> {
     let mut data = state.current.lock().unwrap();
     state.push_undo(&data);
 
-    let mut to_delete = HashSet::new();
-    to_delete.insert(task_id);
+    let mut start_sort_order = match after_id {
+        Some(aid) => {
+            if let Some(prev) = data.tasks.iter().find(|t| t.id == aid) {
+                prev.sort_order + 1
+            } else {
+                data.tasks.iter().map(|t| t.sort_order).max().unwrap_or(0) + 1
+            }
+        }
+        None => data.tasks.iter().map(|t| t.sort_order).max().unwrap_or(0) + 1,
+    };
+
+    let count = tasks.len() as i32;
+    for t in data.tasks.iter_mut() {
+        if t.sort_order >= start_sort_order {
+            t.sort_order += count;
+        }
+    }
+
+    let mut next_id = data.tasks.iter().map(|t| t.id).max().unwrap_or(0) + 1;
+    let parent_id = after_id.and_then(|aid| {
+        data.tasks.iter().find(|t| t.id == aid).and_then(|t| t.parent_id)
+    });
+
+    for input in tasks {
+        let trimmed_name = input.name.trim();
+        if trimmed_name.is_empty() {
+            continue;
+        }
+
+        let duration = input.duration_hours.unwrap_or(data.meta.hours_per_day);
+        let is_milestone = duration == 0.0;
+
+        let new_task = Task {
+            id: next_id,
+            parent_id,
+            wbs_code: "".to_string(),
+            sort_order: start_sort_order,
+            name: trimmed_name.to_string(),
+            duration_hours: duration,
+            start_date: data.meta.project_start_date.clone(),
+            finish_date: data.meta.project_start_date.clone(),
+            constraint_type: None,
+            constraint_date: None,
+            percent_complete: 0.0,
+            is_milestone,
+            is_summary: false,
+            baseline_start: None,
+            baseline_finish: None,
+            baseline_duration_hours: None,
+            notes: None,
+        };
+
+        data.tasks.push(new_task);
+        next_id += 1;
+        start_sort_order += 1;
+    }
+
+    data.tasks.sort_by_key(|t| (t.sort_order, t.id));
+
+    let res = Scheduler::recalculate(&mut data);
+    let can_undo = !state.undo_stack.lock().unwrap().is_empty();
+    let can_redo = !state.redo_stack.lock().unwrap().is_empty();
+    Ok(build_payload(&data, can_undo, can_redo, res.elapsed_ms))
+}
+
+#[tauri::command]
+pub fn delete_task(state: State<AppState>, task_id: i64) -> Result<ProjectPayload, String> {
+    delete_tasks(state, vec![task_id])
+}
+
+#[tauri::command]
+pub fn delete_tasks(state: State<AppState>, task_ids: Vec<i64>) -> Result<ProjectPayload, String> {
+    if task_ids.is_empty() {
+        return get_project(state);
+    }
+    let mut data = state.current.lock().unwrap();
+    state.push_undo(&data);
+
+    let mut to_delete: HashSet<i64> = task_ids.into_iter().collect();
 
     let mut changed = true;
     while changed {
@@ -300,29 +405,60 @@ pub fn delete_task(state: State<AppState>, task_id: i64) -> Result<ProjectPayloa
 
 #[tauri::command]
 pub fn indent_task(state: State<AppState>, task_id: i64) -> Result<ProjectPayload, String> {
+    indent_tasks(state, vec![task_id])
+}
+
+#[tauri::command]
+pub fn indent_tasks(state: State<AppState>, task_ids: Vec<i64>) -> Result<ProjectPayload, String> {
+    if task_ids.is_empty() {
+        return get_project(state);
+    }
     let mut data = state.current.lock().unwrap();
-    let idx = match data.tasks.iter().position(|t| t.id == task_id) {
+
+    // Preserve the visual ordering of tasks
+    let sorted_ids: Vec<i64> = data
+        .tasks
+        .iter()
+        .filter(|t| task_ids.contains(&t.id))
+        .map(|t| t.id)
+        .collect();
+
+    if sorted_ids.is_empty() {
+        return Err("No se encontraron las tareas".into());
+    }
+
+    let first_id = sorted_ids[0];
+    let first_idx = match data.tasks.iter().position(|t| t.id == first_id) {
         Some(i) => i,
         None => return Err("Tarea no encontrada".into()),
     };
 
-    if idx == 0 {
+    if first_idx == 0 {
         return Err("La primera tarea no puede ser indentada".into());
     }
 
     state.push_undo(&data);
-    let current_parent = data.tasks[idx].parent_id;
+    let first_parent = data.tasks[first_idx].parent_id;
 
+    // Target parent is the preceding sibling at the same level, or the immediate previous task
     let mut new_parent_id = None;
-    for prev in data.tasks[..idx].iter().rev() {
-        if prev.parent_id == current_parent {
+    for prev in data.tasks[..first_idx].iter().rev() {
+        if prev.parent_id == first_parent {
             new_parent_id = Some(prev.id);
             break;
         }
     }
 
-    if let Some(npid) = new_parent_id {
-        data.tasks[idx].parent_id = Some(npid);
+    let target_parent = match new_parent_id {
+        Some(pid) => pid,
+        None => data.tasks[first_idx - 1].id,
+    };
+
+    let id_set: HashSet<i64> = sorted_ids.into_iter().collect();
+    for t in data.tasks.iter_mut() {
+        if id_set.contains(&t.id) {
+            t.parent_id = Some(target_parent);
+        }
     }
 
     let res = Scheduler::recalculate(&mut data);
@@ -333,26 +469,55 @@ pub fn indent_task(state: State<AppState>, task_id: i64) -> Result<ProjectPayloa
 
 #[tauri::command]
 pub fn outdent_task(state: State<AppState>, task_id: i64) -> Result<ProjectPayload, String> {
+    outdent_tasks(state, vec![task_id])
+}
+
+#[tauri::command]
+pub fn outdent_tasks(state: State<AppState>, task_ids: Vec<i64>) -> Result<ProjectPayload, String> {
+    if task_ids.is_empty() {
+        return get_project(state);
+    }
     let mut data = state.current.lock().unwrap();
-    let idx = match data.tasks.iter().position(|t| t.id == task_id) {
-        Some(i) => i,
-        None => return Err("Tarea no encontrada".into()),
-    };
-
-    let parent_id = match data.tasks[idx].parent_id {
-        Some(pid) => pid,
-        None => return Err("La tarea ya está en el nivel superior".into()),
-    };
-
     state.push_undo(&data);
 
-    let grandparent_id = data
-        .tasks
-        .iter()
-        .find(|t| t.id == parent_id)
-        .and_then(|p| p.parent_id);
+    let parent_map: HashMap<i64, Option<i64>> =
+        data.tasks.iter().map(|t| (t.id, t.parent_id)).collect();
 
-    data.tasks[idx].parent_id = grandparent_id;
+    let id_set: HashSet<i64> = task_ids.into_iter().collect();
+    for t in data.tasks.iter_mut() {
+        if id_set.contains(&t.id) {
+            if let Some(pid) = t.parent_id {
+                let grandparent = parent_map.get(&pid).copied().flatten();
+                t.parent_id = grandparent;
+            }
+        }
+    }
+
+    let res = Scheduler::recalculate(&mut data);
+    let can_undo = !state.undo_stack.lock().unwrap().is_empty();
+    let can_redo = !state.redo_stack.lock().unwrap().is_empty();
+    Ok(build_payload(&data, can_undo, can_redo, res.elapsed_ms))
+}
+
+#[tauri::command]
+pub fn set_tasks_duration(
+    state: State<AppState>,
+    task_ids: Vec<i64>,
+    duration_hours: f64,
+) -> Result<ProjectPayload, String> {
+    if task_ids.is_empty() {
+        return get_project(state);
+    }
+    let mut data = state.current.lock().unwrap();
+    state.push_undo(&data);
+
+    let id_set: HashSet<i64> = task_ids.into_iter().collect();
+    for t in data.tasks.iter_mut() {
+        if id_set.contains(&t.id) && !t.is_summary {
+            t.duration_hours = duration_hours;
+            t.is_milestone = duration_hours == 0.0;
+        }
+    }
 
     let res = Scheduler::recalculate(&mut data);
     let can_undo = !state.undo_stack.lock().unwrap().is_empty();

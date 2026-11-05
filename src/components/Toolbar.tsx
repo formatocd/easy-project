@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   FolderOpen,
+  FolderDown,
   Save,
   Plus,
   Trash2,
@@ -45,6 +46,7 @@ interface ToolbarProps {
   onImportXml: () => void;
   onOpenPdfModal: () => void;
   onOpenSettings: () => void;
+  onOpenCalendarModal: () => void;
   onUndo: () => void;
   onRedo: () => void;
   onAddTask: () => void;
@@ -79,6 +81,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onImportXml,
   onOpenPdfModal,
   onOpenSettings,
+  onOpenCalendarModal,
   onUndo,
   onRedo,
   onAddTask,
@@ -109,25 +112,25 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   return (
     <header className="relative z-50 border-b border-neutral-300 dark:border-neutral-700 bg-neutral-100 dark:bg-neutral-900 select-none text-neutral-800 dark:text-neutral-200 shadow-xs">
       {/* Top Application Bar */}
-      <div className="flex items-center justify-between px-3 py-1.5 border-b border-neutral-200 dark:border-neutral-800 text-xs">
-        <div className="flex items-center space-x-2 font-semibold">
-          <div className="w-5 h-5 rounded bg-blue-600 text-white flex items-center justify-center font-bold text-[10px]">
+      <div className="flex items-center justify-between px-3 py-1.5 border-b border-neutral-200 dark:border-neutral-800 text-xs gap-2">
+        <div className="flex items-center space-x-2 font-semibold min-w-0 shrink">
+          <div className="w-5 h-5 rounded bg-blue-600 text-white flex items-center justify-center font-bold text-[10px] shrink-0">
             EP
           </div>
-          <span>Easy Project</span>
-          <span className="text-neutral-400">|</span>
+          <span className="shrink-0">Easy Project</span>
+          <span className="text-neutral-400 shrink-0">|</span>
           <button
             onClick={onOpenSettings}
-            className="hover:underline flex items-center gap-1 font-normal text-neutral-600 dark:text-neutral-400"
+            className="hover:underline flex items-center gap-1 font-normal text-neutral-600 dark:text-neutral-400 min-w-0 truncate"
             title="Configurar propiedades del proyecto"
           >
-            <span>{projectName}</span>
-            <SlidersHorizontal className="w-3 h-3 text-neutral-400" />
-            <span className="text-neutral-400 text-[11px]">{filePath ? `(${filePath})` : '(No guardado)'}</span>
+            <span className="truncate max-w-[200px]">{projectName}</span>
+            <SlidersHorizontal className="w-3 h-3 text-neutral-400 shrink-0" />
+            <span className="text-neutral-400 text-[11px] truncate shrink-0">{filePath ? `(${filePath})` : '(No guardado)'}</span>
           </button>
         </div>
 
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-3 shrink-0">
           {calculationMs > 0 && (
             <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-medium">
               <Zap className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
@@ -146,53 +149,54 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       </div>
 
       {/* Ribbon Actions Toolbar */}
-      <div className="flex items-center justify-between px-3 py-1.5 text-xs gap-2 relative">
+      <div className="flex items-center justify-between px-3 py-1.5 text-xs gap-2 relative overflow-x-auto scrollbar-none">
         {/* Left Section: File & History */}
-        <div className="flex items-center space-x-1">
+        <div className="flex items-center space-x-1 shrink-0">
           <button
             onClick={onNew}
-            className="inline-flex items-center gap-1 px-2 py-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-800"
+            className="inline-flex items-center gap-1.5 px-2 py-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-800 shrink-0 whitespace-nowrap"
             title="Nuevo proyecto"
           >
             <FilePlus className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-            <span>Nuevo</span>
+            <span className="hidden xl:inline">Nuevo</span>
           </button>
 
           <button
             onClick={onOpen}
-            className="inline-flex items-center gap-1 px-2 py-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-800"
+            className="inline-flex items-center gap-1.5 px-2 py-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-800 shrink-0 whitespace-nowrap"
             title="Abrir archivo (.epr)"
           >
             <FolderOpen className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-            <span>Abrir</span>
+            <span className="hidden xl:inline">Abrir</span>
           </button>
 
           <button
             onClick={onSave}
-            className="inline-flex items-center gap-1 px-2 py-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-800"
+            className="inline-flex items-center gap-1.5 px-2 py-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-800 shrink-0 whitespace-nowrap"
             title="Guardar cambios (Ctrl+S)"
           >
             <Save className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-            <span>Guardar</span>
+            <span className="hidden lg:inline">Guardar</span>
           </button>
 
           <button
             onClick={onSaveAs}
-            className="px-2 py-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-600 dark:text-neutral-400"
+            className="inline-flex items-center gap-1.5 px-2 py-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-600 dark:text-neutral-400 shrink-0 whitespace-nowrap"
             title="Guardar como..."
           >
-            Como...
+            <FolderDown className="w-3.5 h-3.5 text-neutral-500" />
+            <span className="hidden 2xl:inline">Como...</span>
           </button>
 
           {/* Interoperability / Export Dropdown */}
-          <div className="relative">
+          <div className="relative shrink-0">
             <button
               onClick={() => setShowExportMenu(!showExportMenu)}
-              className="inline-flex items-center gap-1 px-2 py-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-800 font-medium text-neutral-700 dark:text-neutral-300"
+              className="inline-flex items-center gap-1.5 px-2 py-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-800 font-medium text-neutral-700 dark:text-neutral-300 shrink-0 whitespace-nowrap"
               title="Importar y Exportar datos"
             >
               <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-500" />
-              <span>Intercambio</span>
+              <span className="hidden lg:inline">Intercambio</span>
             </button>
 
             {showExportMenu && (
@@ -256,13 +260,13 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             )}
           </div>
 
-          <div className="w-[1px] h-4 bg-neutral-300 dark:bg-neutral-700 mx-1" />
+          <div className="w-[1px] h-4 bg-neutral-300 dark:bg-neutral-700 mx-1 shrink-0" />
 
           {/* History */}
           <button
             onClick={onUndo}
             disabled={!canUndo}
-            className={`p-1.5 rounded ${
+            className={`p-1.5 rounded shrink-0 ${
               canUndo
                 ? 'hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-700 dark:text-neutral-200'
                 : 'opacity-40 cursor-not-allowed text-neutral-400'
@@ -275,7 +279,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           <button
             onClick={onRedo}
             disabled={!canRedo}
-            className={`p-1.5 rounded ${
+            className={`p-1.5 rounded shrink-0 ${
               canRedo
                 ? 'hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-700 dark:text-neutral-200'
                 : 'opacity-40 cursor-not-allowed text-neutral-400'
@@ -285,22 +289,22 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             <Redo2 className="w-3.5 h-3.5" />
           </button>
 
-          <div className="w-[1px] h-4 bg-neutral-300 dark:bg-neutral-700 mx-1" />
+          <div className="w-[1px] h-4 bg-neutral-300 dark:bg-neutral-700 mx-1 shrink-0" />
 
           {/* Task Editing */}
           <button
             onClick={onAddTask}
-            className="inline-flex items-center gap-1 px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700 font-medium"
+            className="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700 font-medium shrink-0 whitespace-nowrap"
             title="Insertar nueva tarea"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>Añadir Tarea</span>
+            <span className="hidden md:inline">Añadir Tarea</span>
           </button>
 
           <button
             onClick={onDeleteTask}
             disabled={!hasSelectedTask}
-            className={`inline-flex items-center gap-1 px-2 py-1 rounded ${
+            className={`inline-flex items-center gap-1.5 px-2 py-1 rounded shrink-0 whitespace-nowrap ${
               hasSelectedTask
                 ? 'hover:bg-red-100 text-red-600 dark:hover:bg-red-950 dark:text-red-400'
                 : 'opacity-40 cursor-not-allowed'
@@ -308,13 +312,13 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             title="Eliminar tarea seleccionada"
           >
             <Trash2 className="w-3.5 h-3.5" />
-            <span>Eliminar</span>
+            <span className="hidden xl:inline">Eliminar</span>
           </button>
 
           <button
             onClick={onOutdentTask}
             disabled={!hasSelectedTask}
-            className={`p-1.5 rounded ${
+            className={`p-1.5 rounded shrink-0 ${
               hasSelectedTask
                 ? 'hover:bg-neutral-200 dark:hover:bg-neutral-800'
                 : 'opacity-40 cursor-not-allowed'
@@ -327,7 +331,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           <button
             onClick={onIndentTask}
             disabled={!hasSelectedTask}
-            className={`p-1.5 rounded ${
+            className={`p-1.5 rounded shrink-0 ${
               hasSelectedTask
                 ? 'hover:bg-neutral-200 dark:hover:bg-neutral-800'
                 : 'opacity-40 cursor-not-allowed'
@@ -337,64 +341,77 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             <Indent className="w-3.5 h-3.5 text-neutral-700 dark:text-neutral-300" />
           </button>
 
-          <div className="w-[1px] h-4 bg-neutral-300 dark:bg-neutral-700 mx-1" />
+          <div className="w-[1px] h-4 bg-neutral-300 dark:bg-neutral-700 mx-1 shrink-0" />
 
           {/* Baseline Actions */}
           <button
             onClick={onSaveBaseline}
-            className="inline-flex items-center gap-1 px-2 py-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-800"
+            className="inline-flex items-center gap-1.5 px-2 py-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-800 shrink-0 whitespace-nowrap"
             title="Guardar o actualizar Línea Base del proyecto"
           >
             <BookmarkPlus className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-            <span>Fijar Línea Base</span>
+            <span className="hidden xl:inline">Línea Base</span>
           </button>
 
           <button
             onClick={onClearBaseline}
-            className="inline-flex items-center gap-1 px-2 py-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-600 dark:text-neutral-400"
+            className="inline-flex items-center gap-1.5 px-2 py-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-600 dark:text-neutral-400 shrink-0"
             title="Borrar Línea Base"
           >
             <BookmarkX className="w-3.5 h-3.5" />
-            <span>Borrar</span>
+          </button>
+
+          <div className="w-[1px] h-4 bg-neutral-300 dark:bg-neutral-700 mx-1 shrink-0" />
+
+          {/* Project Calendar & Holidays */}
+          <button
+            onClick={onOpenCalendarModal}
+            className="inline-flex items-center gap-1.5 px-2 py-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-700 dark:text-neutral-300 shrink-0 whitespace-nowrap"
+            title="Configurar calendario laboral y festivos del proyecto"
+          >
+            <CalendarIcon className="w-3.5 h-3.5 text-blue-500" />
+            <span className="hidden 2xl:inline">Jornada / Festivos</span>
           </button>
         </div>
 
         {/* Right Section: Views & Zoom */}
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-2 shrink-0">
           {/* View Switcher */}
-          <div className="flex bg-neutral-200 dark:bg-neutral-800 p-0.5 rounded-lg border border-neutral-300 dark:border-neutral-700">
+          <div className="flex bg-neutral-200 dark:bg-neutral-800 p-0.5 rounded-lg border border-neutral-300 dark:border-neutral-700 shrink-0">
             <button
               onClick={() => onViewChange('GANTT')}
-              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition ${
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition shrink-0 whitespace-nowrap ${
                 activeView === 'GANTT'
                   ? 'bg-white dark:bg-neutral-900 shadow-sm text-blue-600 dark:text-blue-400'
                   : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200'
               }`}
+              title="Vista Diagrama de Gantt"
             >
               <BarChart2 className="w-3.5 h-3.5" />
-              <span>Gantt</span>
+              <span className="hidden md:inline">Gantt</span>
             </button>
 
             <button
               onClick={() => onViewChange('CALENDAR')}
-              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition ${
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition shrink-0 whitespace-nowrap ${
                 activeView === 'CALENDAR'
                   ? 'bg-white dark:bg-neutral-900 shadow-sm text-blue-600 dark:text-blue-400'
                   : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200'
               }`}
+              title="Vista Calendario Mensual"
             >
               <CalendarIcon className="w-3.5 h-3.5" />
-              <span>Calendario</span>
+              <span className="hidden md:inline">Calendario</span>
             </button>
           </div>
 
           {/* Zoom Controls (Active in Gantt) */}
           {activeView === 'GANTT' && (
-            <div className="flex items-center space-x-1 pl-1">
+            <div className="flex items-center space-x-1 pl-1 shrink-0">
               <button
                 onClick={handleZoomIn}
                 disabled={currentZoomIdx === 0}
-                className="p-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-800 disabled:opacity-40"
+                className="p-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-800 disabled:opacity-40 shrink-0"
                 title="Acercar Zoom"
               >
                 <ZoomIn className="w-3.5 h-3.5" />
@@ -403,7 +420,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
               <select
                 value={zoomLevel}
                 onChange={(e) => onZoomChange(e.target.value as ZoomLevel)}
-                className="bg-neutral-200 dark:bg-neutral-800 border-none rounded px-2 py-0.5 text-xs text-neutral-800 dark:text-neutral-200 focus:outline-none cursor-pointer"
+                className="bg-neutral-200 dark:bg-neutral-800 border-none rounded px-2 py-0.5 text-xs text-neutral-800 dark:text-neutral-200 focus:outline-none cursor-pointer shrink-0"
               >
                 <option value="HOURS">Horas</option>
                 <option value="DAYS">Días</option>
@@ -415,7 +432,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
               <button
                 onClick={handleZoomOut}
                 disabled={currentZoomIdx === ZOOM_LEVELS.length - 1}
-                className="p-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-800 disabled:opacity-40"
+                className="p-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-800 disabled:opacity-40 shrink-0"
                 title="Alejar Zoom"
               >
                 <ZoomOut className="w-3.5 h-3.5" />

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, ListTodo, Link2, Sliders, FileText, Plus, Trash2 } from 'lucide-react';
+import { X, ListTodo, Plus, Trash2 } from 'lucide-react';
 import { Dependency, DependencyType, Task, TaskDto } from '../types/project';
 import { formatDateTime, formatDuration, parseDurationInput } from '../utils/formatters';
 

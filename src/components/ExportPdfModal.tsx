@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Printer, Image, FileCode, Check } from 'lucide-react';
+import { X, Printer, Image, FileCode } from 'lucide-react';
 
 interface ExportPdfModalProps {
   isOpen: boolean;

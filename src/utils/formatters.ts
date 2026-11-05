@@ -78,7 +78,7 @@ export function getZoomColumnWidth(zoom: ZoomLevel): number {
   }
 }
 
-export function getPixelsPerHour(zoom: ZoomLevel, hoursPerDay = 8): number {
+export function getPixelsPerHour(zoom: ZoomLevel, _hoursPerDay = 8): number {
   switch (zoom) {
     case 'HOURS':
       return 45;
