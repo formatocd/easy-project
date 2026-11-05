@@ -153,4 +153,12 @@ export const tauriApi = {
   async redo(): Promise<ProjectPayload> {
     return await invoke<ProjectPayload>('redo');
   },
+
+  async getInitialConfig(): Promise<{ language?: string; theme?: string }> {
+    try {
+      return await invoke<{ language?: string; theme?: string }>('get_initial_config');
+    } catch {
+      return {};
+    }
+  },
 };

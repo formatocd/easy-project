@@ -35,8 +35,9 @@
     ],
     "windows": {
       "nsis": {
-        "languages": ["Spanish", "English"],
-        "displayLanguageSelector": true
+        "languages": ["Spanish", "English", "French", "German", "Italian", "Portuguese"],
+        "displayLanguageSelector": true,
+        "installerHooks": "windows/hooks.nsh"
       },
       "wix": {
         "language": "es-ES"

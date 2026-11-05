@@ -21,7 +21,7 @@ export const App: React.FC = () => {
   const [zoomLevel, setZoomLevel] = useState<ZoomLevel>('DAYS');
   const [language, setLanguage] = useState<Language>(() => {
     const saved = localStorage.getItem('easy_project_lang');
-    return saved === 'en' || saved === 'es' ? saved : 'es';
+    return saved && ['es', 'en', 'fr', 'de', 'it', 'pt'].includes(saved) ? (saved as Language) : 'es';
   });
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     const saved = localStorage.getItem('easy_project_theme');
@@ -29,12 +29,30 @@ export const App: React.FC = () => {
     return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
 
-  const toggleLanguage = useCallback(() => {
-    setLanguage((prev) => {
-      const next = prev === 'es' ? 'en' : 'es';
-      localStorage.setItem('easy_project_lang', next);
-      return next;
-    });
+  // Load initial installer preferences on first launch
+  useEffect(() => {
+    const hasConfigured = localStorage.getItem('easy_project_configured');
+    if (!hasConfigured) {
+      tauriApi.getInitialConfig().then((cfg) => {
+        if (cfg.language && ['es', 'en', 'fr', 'de', 'it', 'pt'].includes(cfg.language)) {
+          setLanguage(cfg.language as Language);
+          localStorage.setItem('easy_project_lang', cfg.language);
+        }
+        if (cfg.theme === 'dark' || cfg.theme === 'light') {
+          const isDark = cfg.theme === 'dark';
+          setDarkMode(isDark);
+          localStorage.setItem('easy_project_theme', cfg.theme);
+        }
+        localStorage.setItem('easy_project_configured', 'true');
+      }).catch(() => {
+        localStorage.setItem('easy_project_configured', 'true');
+      });
+    }
+  }, []);
+
+  const handleSelectLanguage = useCallback((lang: Language) => {
+    setLanguage(lang);
+    localStorage.setItem('easy_project_lang', lang);
   }, []);
 
   // Modal States
@@ -534,7 +552,7 @@ export const App: React.FC = () => {
         onZoomChange={setZoomLevel}
         onToggleTheme={() => setDarkMode(!darkMode)}
         language={language}
-        onToggleLanguage={toggleLanguage}
+        onSelectLanguage={handleSelectLanguage}
       />
 
       {/* Main Workspace View */}
@@ -581,6 +599,7 @@ export const App: React.FC = () => {
           <CalendarView
             tasks={visibleTaskDtos}
             selectedTaskId={selectedTaskId}
+            language={language}
             onSelectTask={(id) => handleSelectTask(id)}
           />
         )}

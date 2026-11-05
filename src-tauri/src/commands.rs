@@ -682,3 +682,42 @@ pub fn redo(state: State<AppState>) -> Result<ProjectPayload, String> {
     let can_redo = !redo_stack.is_empty();
     Ok(build_payload(&current, can_undo, can_redo, 0.0))
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct InitialConfig {
+    pub language: Option<String>,
+    pub theme: Option<String>,
+}
+
+#[tauri::command]
+pub fn get_initial_config(app: tauri::AppHandle) -> InitialConfig {
+    use tauri::Manager;
+
+    // 1. Try application executable folder (INSTDIR)
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            let path = parent.join("initial_config.json");
+            if path.exists() {
+                if let Ok(content) = std::fs::read_to_string(&path) {
+                    if let Ok(cfg) = serde_json::from_str::<InitialConfig>(&content) {
+                        return cfg;
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Try AppConfig / AppData roaming dir
+    if let Ok(app_dir) = app.path().app_config_dir() {
+        let path = app_dir.join("initial_config.json");
+        if path.exists() {
+            if let Ok(content) = std::fs::read_to_string(&path) {
+                if let Ok(cfg) = serde_json::from_str::<InitialConfig>(&content) {
+                    return cfg;
+                }
+            }
+        }
+    }
+
+    InitialConfig::default()
+}

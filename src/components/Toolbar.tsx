@@ -24,9 +24,10 @@ import {
   Printer,
   SlidersHorizontal,
   Zap,
+  ChevronDown,
 } from 'lucide-react';
 import { ActiveView, ZoomLevel } from '../types/project';
-import { Language, translations } from '../i18n/translations';
+import { Language, translations, SUPPORTED_LANGUAGES } from '../i18n/translations';
 
 interface ToolbarProps {
   projectName: string;
@@ -60,7 +61,7 @@ interface ToolbarProps {
   onViewChange: (view: ActiveView) => void;
   onZoomChange: (zoom: ZoomLevel) => void;
   onToggleTheme: () => void;
-  onToggleLanguage: () => void;
+  onSelectLanguage: (lang: Language) => void;
 }
 
 const ZOOM_LEVELS: ZoomLevel[] = ['HOURS', 'DAYS', 'WEEKS', 'MONTHS', 'YEARS'];
@@ -97,10 +98,12 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onViewChange,
   onZoomChange,
   onToggleTheme,
-  onToggleLanguage,
+  onSelectLanguage,
 }) => {
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showLangMenu, setShowLangMenu] = useState(false);
   const t = translations[language];
+  const currentLang = SUPPORTED_LANGUAGES.find((l) => l.code === language) || SUPPORTED_LANGUAGES[0];
   const currentZoomIdx = ZOOM_LEVELS.indexOf(zoomLevel);
 
   const handleZoomIn = () => {
@@ -144,13 +147,49 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             </span>
           )}
 
-          <button
-            onClick={onToggleLanguage}
-            className="px-2 py-0.5 rounded border border-neutral-300 dark:border-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-800 text-[11px] font-semibold text-neutral-700 dark:text-neutral-300 shrink-0"
-            title={language === 'es' ? 'Switch to English' : 'Cambiar a Español'}
-          >
-            {language === 'es' ? 'EN' : 'ES'}
-          </button>
+          {/* Language Selector Dropdown */}
+          <div className="relative shrink-0">
+            <button
+              onClick={() => setShowLangMenu(!showLangMenu)}
+              className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded border border-neutral-300 dark:border-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-800 text-[11px] font-medium text-neutral-700 dark:text-neutral-300 transition"
+              title={t.selectLanguage}
+            >
+              <span className="text-xs">{currentLang.flag}</span>
+              <span className="font-semibold">{currentLang.code.toUpperCase()}</span>
+              <ChevronDown className="w-3 h-3 text-neutral-400" />
+            </button>
+
+            {showLangMenu && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setShowLangMenu(false)}
+                />
+                <div className="absolute right-0 top-full mt-1 w-36 bg-white dark:bg-neutral-900 border border-neutral-300 dark:border-neutral-700 rounded-md shadow-2xl z-50 py-1 text-xs">
+                  {SUPPORTED_LANGUAGES.map((l) => (
+                    <button
+                      key={l.code}
+                      onClick={() => {
+                        onSelectLanguage(l.code);
+                        setShowLangMenu(false);
+                      }}
+                      className={`w-full text-left px-3 py-1.5 flex items-center justify-between transition ${
+                        language === l.code
+                          ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-semibold'
+                          : 'text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <span>{l.flag}</span>
+                        <span>{l.name}</span>
+                      </span>
+                      {language === l.code && <span className="text-blue-500 font-bold">✓</span>}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
 
           <button
             onClick={onToggleTheme}

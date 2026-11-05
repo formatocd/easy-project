@@ -36,7 +36,8 @@ pub fn run() {
             commands::save_baseline,
             commands::clear_baseline,
             commands::undo,
-            commands::redo
+            commands::redo,
+            commands::get_initial_config
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

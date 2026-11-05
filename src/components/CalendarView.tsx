@@ -2,16 +2,28 @@ import React, { useState } from 'react';
 import { ChevronLeft, ChevronRight, Diamond } from 'lucide-react';
 import { TaskDto } from '../types/project';
 import { formatDateShort } from '../utils/formatters';
+import { Language } from '../i18n/translations';
 
 interface CalendarViewProps {
   tasks: TaskDto[];
   selectedTaskId: number | null;
+  language?: Language;
   onSelectTask: (taskId: number) => void;
 }
+
+const LOCALE_MAP: Record<Language, string> = {
+  es: 'es-ES',
+  en: 'en-US',
+  fr: 'fr-FR',
+  de: 'de-DE',
+  it: 'it-IT',
+  pt: 'pt-PT',
+};
 
 export const CalendarView: React.FC<CalendarViewProps> = ({
   tasks,
   selectedTaskId,
+  language = 'es',
   onSelectTask,
 }) => {
   const [currentMonth, setCurrentMonth] = useState(() => {
@@ -37,12 +49,16 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   // Adjust for Monday start (0: Mon, 6: Sun)
   const startOffset = (firstDayIndex + 6) % 7;
 
-  const monthName = currentMonth.toLocaleString('es-ES', {
+  const locale = LOCALE_MAP[language] || 'es-ES';
+  const monthName = currentMonth.toLocaleString(locale, {
     month: 'long',
     year: 'numeric',
   });
 
-  const weekDayHeaders = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+  const weekDayHeaders = [1, 2, 3, 4, 5, 6, 7].map((d) => {
+    const dt = new Date(2024, 0, d); // 2024-01-01 is Monday
+    return dt.toLocaleDateString(locale, { weekday: 'short' });
+  });
 
   // Map tasks for each calendar day
   const getTasksForDay = (day: number) => {
