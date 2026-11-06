@@ -123,9 +123,14 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       {/* Top Application Bar */}
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-neutral-200 dark:border-neutral-800 text-xs gap-2">
         <div className="flex items-center space-x-2 font-semibold min-w-0 shrink">
-          <div className="w-5 h-5 rounded bg-blue-600 text-white flex items-center justify-center font-bold text-[10px] shrink-0">
-            EP
-          </div>
+          <img
+            src="/app-icon.png"
+            alt="EP"
+            className="w-5 h-5 rounded object-contain shrink-0 bg-white shadow-xs p-0.5"
+            onError={(e) => {
+              (e.currentTarget as HTMLElement).style.display = 'none';
+            }}
+          />
           <span className="shrink-0">Easy Project</span>
           <span className="text-neutral-400 shrink-0">|</span>
           <button
