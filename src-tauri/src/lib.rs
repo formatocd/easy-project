@@ -20,6 +20,7 @@ pub fn run() {
             commands::export_project_excel,
             commands::import_project_xml,
             commands::update_calendar,
+            commands::update_project_meta,
             commands::update_task,
             commands::add_task,
             commands::add_tasks_batch,
@@ -37,7 +38,8 @@ pub fn run() {
             commands::clear_baseline,
             commands::undo,
             commands::redo,
-            commands::get_initial_config
+            commands::get_initial_config,
+            commands::set_window_title
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

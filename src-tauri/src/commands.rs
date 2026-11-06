@@ -131,6 +131,7 @@ pub fn new_project(state: State<AppState>, name: Option<String>) -> Result<Proje
     Ok(build_payload(&data, can_undo, can_redo, res.elapsed_ms))
 }
 
+
 #[tauri::command]
 pub fn open_project_file(state: State<AppState>, path: String) -> Result<ProjectPayload, String> {
     let conn = DbStorage::open_or_create(&path)
@@ -151,6 +152,7 @@ pub fn open_project_file(state: State<AppState>, path: String) -> Result<Project
     let can_redo = !state.redo_stack.lock().unwrap().is_empty();
     Ok(build_payload(&data, can_undo, can_redo, res.elapsed_ms))
 }
+
 
 #[tauri::command]
 pub fn save_project_file(state: State<AppState>, target_path: Option<String>) -> Result<String, String> {
@@ -217,6 +219,23 @@ pub fn update_calendar(
 }
 
 #[tauri::command]
+pub fn update_project_meta(
+    state: State<AppState>,
+    meta: crate::models::project::ProjectMeta,
+) -> Result<ProjectPayload, String> {
+    let mut data = state.current.lock().unwrap();
+    state.push_undo(&data);
+
+    data.meta = meta;
+
+    let res = Scheduler::recalculate(&mut data);
+    let can_undo = !state.undo_stack.lock().unwrap().is_empty();
+    let can_redo = !state.redo_stack.lock().unwrap().is_empty();
+    Ok(build_payload(&data, can_undo, can_redo, res.elapsed_ms))
+}
+
+
+#[tauri::command]
 pub fn update_task(state: State<AppState>, updated: Task) -> Result<ProjectPayload, String> {
     let mut data = state.current.lock().unwrap();
     state.push_undo(&data);
@@ -230,6 +249,7 @@ pub fn update_task(state: State<AppState>, updated: Task) -> Result<ProjectPaylo
     let can_redo = !state.redo_stack.lock().unwrap().is_empty();
     Ok(build_payload(&data, can_undo, can_redo, res.elapsed_ms))
 }
+
 
 #[tauri::command]
 pub fn add_task(
@@ -284,6 +304,7 @@ pub fn add_task(
     let can_redo = !state.redo_stack.lock().unwrap().is_empty();
     Ok(build_payload(&data, can_undo, can_redo, res.elapsed_ms))
 }
+
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NewTaskInput {
@@ -365,6 +386,7 @@ pub fn add_tasks_batch(
     Ok(build_payload(&data, can_undo, can_redo, res.elapsed_ms))
 }
 
+
 #[tauri::command]
 pub fn delete_task(state: State<AppState>, task_id: i64) -> Result<ProjectPayload, String> {
     delete_tasks(state, vec![task_id])
@@ -402,6 +424,7 @@ pub fn delete_tasks(state: State<AppState>, task_ids: Vec<i64>) -> Result<Projec
     let can_redo = !state.redo_stack.lock().unwrap().is_empty();
     Ok(build_payload(&data, can_undo, can_redo, res.elapsed_ms))
 }
+
 
 #[tauri::command]
 pub fn indent_task(state: State<AppState>, task_id: i64) -> Result<ProjectPayload, String> {
@@ -467,6 +490,7 @@ pub fn indent_tasks(state: State<AppState>, task_ids: Vec<i64>) -> Result<Projec
     Ok(build_payload(&data, can_undo, can_redo, res.elapsed_ms))
 }
 
+
 #[tauri::command]
 pub fn outdent_task(state: State<AppState>, task_id: i64) -> Result<ProjectPayload, String> {
     outdent_tasks(state, vec![task_id])
@@ -499,6 +523,7 @@ pub fn outdent_tasks(state: State<AppState>, task_ids: Vec<i64>) -> Result<Proje
     Ok(build_payload(&data, can_undo, can_redo, res.elapsed_ms))
 }
 
+
 #[tauri::command]
 pub fn set_tasks_duration(
     state: State<AppState>,
@@ -524,6 +549,7 @@ pub fn set_tasks_duration(
     let can_redo = !state.redo_stack.lock().unwrap().is_empty();
     Ok(build_payload(&data, can_undo, can_redo, res.elapsed_ms))
 }
+
 
 #[tauri::command]
 pub fn set_task_predecessors(
@@ -556,6 +582,7 @@ pub fn set_task_predecessors(
     let can_redo = !state.redo_stack.lock().unwrap().is_empty();
     Ok(build_payload(&data, can_undo, can_redo, res.elapsed_ms))
 }
+
 
 #[tauri::command]
 pub fn add_dependency(
@@ -602,6 +629,7 @@ pub fn add_dependency(
     Ok(build_payload(&data, can_undo, can_redo, res.elapsed_ms))
 }
 
+
 #[tauri::command]
 pub fn remove_dependency(state: State<AppState>, dep_id: String) -> Result<ProjectPayload, String> {
     let mut data = state.current.lock().unwrap();
@@ -614,6 +642,7 @@ pub fn remove_dependency(state: State<AppState>, dep_id: String) -> Result<Proje
     let can_redo = !state.redo_stack.lock().unwrap().is_empty();
     Ok(build_payload(&data, can_undo, can_redo, res.elapsed_ms))
 }
+
 
 #[tauri::command]
 pub fn save_baseline(state: State<AppState>) -> Result<ProjectPayload, String> {
@@ -720,4 +749,9 @@ pub fn get_initial_config(app: tauri::AppHandle) -> InitialConfig {
     }
 
     InitialConfig::default()
+}
+
+#[tauri::command]
+pub fn set_window_title(window: tauri::Window, title: String) -> Result<(), String> {
+    window.set_title(&title).map_err(|e| e.to_string())
 }

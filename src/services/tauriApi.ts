@@ -2,6 +2,13 @@ import { invoke } from '@tauri-apps/api/core';
 import { open, save } from '@tauri-apps/plugin-dialog';
 import { ProjectPayload, Task } from '../types/project';
 
+function sanitizeFileName(name?: string, fallback = 'Proyecto'): string {
+  if (!name || !name.trim()) return `${fallback}.epr`;
+  // Reemplazar espacios por guiones bajos y eliminar caracteres no válidos en nombres de fichero
+  const cleaned = name.trim().replace(/\s+/g, '_').replace(/[\\/:*?"<>|]/g, '');
+  return `${cleaned || fallback}.epr`;
+}
+
 export const tauriApi = {
   async getProject(): Promise<ProjectPayload> {
     return await invoke<ProjectPayload>('get_project');
@@ -20,12 +27,13 @@ export const tauriApi = {
     return await invoke<ProjectPayload>('open_project_file', { path: selected });
   },
 
-  async saveProjectDialog(currentPath: string | null): Promise<string | null> {
+  async saveProjectDialog(currentPath: string | null, projectName?: string): Promise<string | null> {
     let targetPath = currentPath;
     if (!targetPath) {
+      const defaultFileName = sanitizeFileName(projectName);
       const selected = await save({
         filters: [{ name: 'Easy Project (*.epr)', extensions: ['epr'] }],
-        defaultPath: 'Proyecto.epr',
+        defaultPath: defaultFileName,
       });
       if (!selected) return null;
       targetPath = selected;
@@ -33,28 +41,31 @@ export const tauriApi = {
     return await invoke<string>('save_project_file', { targetPath });
   },
 
-  async saveProjectAsDialog(): Promise<string | null> {
+  async saveProjectAsDialog(projectName?: string, currentPath?: string | null): Promise<string | null> {
+    const defaultFileName = currentPath || sanitizeFileName(projectName);
     const selected = await save({
       filters: [{ name: 'Easy Project (*.epr)', extensions: ['epr'] }],
-      defaultPath: 'Proyecto.epr',
+      defaultPath: defaultFileName,
     });
     if (!selected) return null;
     return await invoke<string>('save_project_file', { targetPath: selected });
   },
 
-  async exportCsvDialog(): Promise<string | null> {
+  async exportCsvDialog(projectName?: string): Promise<string | null> {
+    const baseName = sanitizeFileName(projectName, 'Tareas_Proyecto').replace(/\.epr$/, '');
     const selected = await save({
       filters: [{ name: 'Archivo CSV (*.csv)', extensions: ['csv'] }],
-      defaultPath: 'Tareas_Proyecto.csv',
+      defaultPath: `${baseName}.csv`,
     });
     if (!selected) return null;
     return await invoke<string>('export_project_csv', { path: selected });
   },
 
-  async exportExcelDialog(): Promise<string | null> {
+  async exportExcelDialog(projectName?: string): Promise<string | null> {
+    const baseName = sanitizeFileName(projectName, 'Cronograma_Proyecto').replace(/\.epr$/, '');
     const selected = await save({
       filters: [{ name: 'Libro de Excel (*.xlsx)', extensions: ['xlsx'] }],
-      defaultPath: 'Cronograma_Proyecto.xlsx',
+      defaultPath: `${baseName}.xlsx`,
     });
     if (!selected) return null;
     return await invoke<string>('export_project_excel', { path: selected });
@@ -74,6 +85,12 @@ export const tauriApi = {
     exceptions: import('../types/project').CalendarException[],
   ): Promise<ProjectPayload> {
     return await invoke<ProjectPayload>('update_calendar', { calendar, exceptions });
+  },
+
+  async updateProjectMeta(
+    meta: import('../types/project').ProjectMeta,
+  ): Promise<ProjectPayload> {
+    return await invoke<ProjectPayload>('update_project_meta', { meta });
   },
 
   async addTask(afterId?: number, name?: string): Promise<ProjectPayload> {
@@ -159,6 +176,14 @@ export const tauriApi = {
       return await invoke<{ language?: string; theme?: string }>('get_initial_config');
     } catch {
       return {};
+    }
+  },
+
+  async setWindowTitle(title: string): Promise<void> {
+    try {
+      await invoke('set_window_title', { title });
+    } catch {
+      document.title = title;
     }
   },
 };

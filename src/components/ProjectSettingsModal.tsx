@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Settings } from 'lucide-react';
 import { ProjectMeta, ScheduleFrom } from '../types/project';
 import { formatDateTime } from '../utils/formatters';
@@ -21,6 +21,16 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
   const [startDate, setStartDate] = useState(meta.project_start_date.slice(0, 16));
   const [hoursPerDay, setHoursPerDay] = useState(meta.hours_per_day);
   const [currencySymbol, setCurrencySymbol] = useState(meta.currency_symbol);
+
+  useEffect(() => {
+    if (isOpen) {
+      setName(meta.name);
+      setScheduleFrom(meta.schedule_from);
+      setStartDate(meta.project_start_date.slice(0, 16));
+      setHoursPerDay(meta.hours_per_day);
+      setCurrencySymbol(meta.currency_symbol);
+    }
+  }, [isOpen, meta]);
 
   if (!isOpen) return null;
 

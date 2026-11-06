@@ -22,7 +22,7 @@ import {
   FileText,
   FileUp,
   Printer,
-  SlidersHorizontal,
+  Pencil,
   Zap,
   ChevronDown,
 } from 'lucide-react';
@@ -122,25 +122,16 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     <header className="relative z-50 border-b border-neutral-300 dark:border-neutral-700 bg-neutral-100 dark:bg-neutral-900 select-none text-neutral-800 dark:text-neutral-200 shadow-xs">
       {/* Top Application Bar */}
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-neutral-200 dark:border-neutral-800 text-xs gap-2">
-        <div className="flex items-center space-x-2 font-semibold min-w-0 shrink">
-          <img
-            src="/app-icon.png"
-            alt="EP"
-            className="w-5 h-5 rounded object-contain shrink-0 bg-white shadow-xs p-0.5"
-            onError={(e) => {
-              (e.currentTarget as HTMLElement).style.display = 'none';
-            }}
-          />
-          <span className="shrink-0">Easy Project</span>
-          <span className="text-neutral-400 shrink-0">|</span>
+        <div className="flex items-center min-w-0 shrink">
           <button
             onClick={onOpenSettings}
-            className="hover:underline flex items-center gap-1 font-normal text-neutral-600 dark:text-neutral-400 min-w-0 truncate"
-            title="Configurar propiedades del proyecto"
+            className="group inline-flex items-center gap-1.5 px-2 py-0.5 rounded hover:bg-neutral-200 dark:hover:bg-neutral-800 transition min-w-0"
+            title="Editar propiedades del proyecto"
           >
-            <span className="truncate max-w-[200px]">{projectName}</span>
-            <SlidersHorizontal className="w-3 h-3 text-neutral-400 shrink-0" />
-            <span className="text-neutral-400 text-[11px] truncate shrink-0">{filePath ? `(${filePath})` : '(No guardado)'}</span>
+            <span className="font-semibold text-neutral-800 dark:text-neutral-200 truncate max-w-[280px]">
+              {projectName}
+            </span>
+            <Pencil className="w-3.5 h-3.5 text-neutral-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 shrink-0 transition-colors" />
           </button>
         </div>
 

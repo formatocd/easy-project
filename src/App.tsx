@@ -28,6 +28,15 @@ export const App: React.FC = () => {
     if (saved) return saved === 'dark';
     return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
+  const [isDirty, setIsDirty] = useState<boolean>(false);
+
+  // Synchronize Window Title with project name and unsaved changes indicator (*)
+  useEffect(() => {
+    const name = projectPayload?.data.meta.name || 'Nuevo Proyecto';
+    const dirtyMarker = isDirty ? ' *' : '';
+    const title = `Easy Project - ${name}${dirtyMarker}`;
+    tauriApi.setWindowTitle(title);
+  }, [projectPayload?.data.meta.name, isDirty]);
 
   // Load initial installer preferences on first launch
   useEffect(() => {
@@ -168,6 +177,7 @@ export const App: React.FC = () => {
       const payload = await tauriApi.newProject();
       setProjectPayload(payload);
       setSelectedTaskIds(payload.task_dtos[0] ? [payload.task_dtos[0].id] : []);
+      setIsDirty(false);
     } catch (err: any) {
       alert(`Error: ${err}`);
     }
@@ -179,6 +189,7 @@ export const App: React.FC = () => {
       if (payload) {
         setProjectPayload(payload);
         setSelectedTaskIds(payload.task_dtos[0] ? [payload.task_dtos[0].id] : []);
+        setIsDirty(false);
       }
     } catch (err: any) {
       alert(`Error al abrir: ${err}`);
@@ -188,12 +199,16 @@ export const App: React.FC = () => {
   const handleSave = async () => {
     if (!projectPayload) return;
     try {
-      const savedPath = await tauriApi.saveProjectDialog(projectPayload.data.file_path);
+      const savedPath = await tauriApi.saveProjectDialog(
+        projectPayload.data.file_path,
+        projectPayload.data.meta.name
+      );
       if (savedPath) {
         setProjectPayload({
           ...projectPayload,
           data: { ...projectPayload.data, file_path: savedPath },
         });
+        setIsDirty(false);
       }
     } catch (err: any) {
       alert(`Error al guardar: ${err}`);
@@ -203,12 +218,16 @@ export const App: React.FC = () => {
   const handleSaveAs = async () => {
     if (!projectPayload) return;
     try {
-      const savedPath = await tauriApi.saveProjectAsDialog();
+      const savedPath = await tauriApi.saveProjectAsDialog(
+        projectPayload.data.meta.name,
+        projectPayload.data.file_path
+      );
       if (savedPath) {
         setProjectPayload({
           ...projectPayload,
           data: { ...projectPayload.data, file_path: savedPath },
         });
+        setIsDirty(false);
       }
     } catch (err: any) {
       alert(`Error al guardar como: ${err}`);
@@ -217,7 +236,7 @@ export const App: React.FC = () => {
 
   const handleExportCsv = async () => {
     try {
-      const res = await tauriApi.exportCsvDialog();
+      const res = await tauriApi.exportCsvDialog(projectPayload?.data.meta.name);
       if (res) alert(`Archivo CSV exportado exitosamente a:\n${res}`);
     } catch (err: any) {
       alert(`Error al exportar CSV: ${err}`);
@@ -226,7 +245,7 @@ export const App: React.FC = () => {
 
   const handleExportExcel = async () => {
     try {
-      const res = await tauriApi.exportExcelDialog();
+      const res = await tauriApi.exportExcelDialog(projectPayload?.data.meta.name);
       if (res) alert(`Archivo Excel (.xlsx) exportado exitosamente a:\n${res}`);
     } catch (err: any) {
       alert(`Error al exportar Excel: ${err}`);
@@ -239,6 +258,7 @@ export const App: React.FC = () => {
       if (payload) {
         setProjectPayload(payload);
         setSelectedTaskIds(payload.task_dtos[0] ? [payload.task_dtos[0].id] : []);
+        setIsDirty(true);
         alert('Proyecto MS Project XML importado correctamente.');
       }
     } catch (err: any) {
@@ -251,6 +271,7 @@ export const App: React.FC = () => {
     try {
       const payload = await tauriApi.undo();
       setProjectPayload(payload);
+      setIsDirty(true);
     } catch (err: any) {
       console.warn(err);
     }
@@ -261,6 +282,7 @@ export const App: React.FC = () => {
     try {
       const payload = await tauriApi.redo();
       setProjectPayload(payload);
+      setIsDirty(true);
     } catch (err: any) {
       console.warn(err);
     }
@@ -270,6 +292,7 @@ export const App: React.FC = () => {
     try {
       const payload = await tauriApi.addTask(selectedTaskId ?? undefined, name);
       setProjectPayload(payload);
+      setIsDirty(true);
       const last = payload.task_dtos[payload.task_dtos.length - 1];
       if (last) setSelectedTaskIds([last.id]);
     } catch (err: any) {
@@ -281,6 +304,7 @@ export const App: React.FC = () => {
     try {
       const payload = await tauriApi.addTasksBatch(taskInputs, selectedTaskId ?? undefined);
       setProjectPayload(payload);
+      setIsDirty(true);
       if (payload.task_dtos.length > 0) {
         setSelectedTaskIds([payload.task_dtos[payload.task_dtos.length - 1].id]);
       }
@@ -294,6 +318,7 @@ export const App: React.FC = () => {
     try {
       const payload = await tauriApi.deleteTasks(selectedTaskIds);
       setProjectPayload(payload);
+      setIsDirty(true);
       setSelectedTaskIds(payload.task_dtos[0] ? [payload.task_dtos[0].id] : []);
     } catch (err: any) {
       alert(`Error al eliminar: ${err}`);
@@ -305,6 +330,7 @@ export const App: React.FC = () => {
     try {
       const payload = await tauriApi.indentTasks(selectedTaskIds);
       setProjectPayload(payload);
+      setIsDirty(true);
     } catch (err: any) {
       alert(`Error al indentar: ${err}`);
     }
@@ -315,6 +341,7 @@ export const App: React.FC = () => {
     try {
       const payload = await tauriApi.outdentTasks(selectedTaskIds);
       setProjectPayload(payload);
+      setIsDirty(true);
     } catch (err: any) {
       alert(`Error al desindentar: ${err}`);
     }
@@ -324,6 +351,7 @@ export const App: React.FC = () => {
     try {
       const payload = await tauriApi.setTasksDuration(taskIds, hours);
       setProjectPayload(payload);
+      setIsDirty(true);
     } catch (err: any) {
       alert(`Error al cambiar duración: ${err}`);
     }
@@ -333,6 +361,7 @@ export const App: React.FC = () => {
     try {
       const payload = await tauriApi.updateTask(updated);
       setProjectPayload(payload);
+      setIsDirty(true);
     } catch (err: any) {
       alert(`Error: ${err}`);
     }
@@ -342,6 +371,7 @@ export const App: React.FC = () => {
     try {
       const payload = await tauriApi.setTaskPredecessors(taskId, expr);
       setProjectPayload(payload);
+      setIsDirty(true);
     } catch (err: any) {
       alert(`Error de dependencias: ${err}`);
     }
@@ -351,6 +381,7 @@ export const App: React.FC = () => {
     try {
       const payload = await tauriApi.addDependency(predId, succId);
       setProjectPayload(payload);
+      setIsDirty(true);
     } catch (err: any) {
       alert(`Error: ${err}`);
     }
@@ -360,6 +391,7 @@ export const App: React.FC = () => {
     try {
       const payload = await tauriApi.saveBaseline();
       setProjectPayload(payload);
+      setIsDirty(true);
       alert('Línea base guardada correctamente.');
     } catch (err: any) {
       alert(`Error de línea base: ${err}`);
@@ -371,6 +403,7 @@ export const App: React.FC = () => {
     try {
       const payload = await tauriApi.clearBaseline();
       setProjectPayload(payload);
+      setIsDirty(true);
     } catch (err: any) {
       alert(`Error al borrar línea base: ${err}`);
     }
@@ -416,18 +449,9 @@ export const App: React.FC = () => {
         ...projectPayload.data.meta,
         ...settings,
       };
-      const updatedCalendar = {
-        ...projectPayload.data.calendar,
-        hours_per_day: settings.hours_per_day,
-      };
-      const payload = await tauriApi.updateCalendar(updatedCalendar, projectPayload.data.exceptions);
-      setProjectPayload({
-        ...payload,
-        data: {
-          ...payload.data,
-          meta: updatedMeta,
-        },
-      });
+      const payload = await tauriApi.updateProjectMeta(updatedMeta);
+      setProjectPayload(payload);
+      setIsDirty(true);
       setIsSettingsOpen(false);
     } catch (err: any) {
       alert(`Error al guardar configuración: ${err}`);
@@ -441,6 +465,7 @@ export const App: React.FC = () => {
     try {
       const payload = await tauriApi.updateCalendar(calendar, exceptions);
       setProjectPayload(payload);
+      setIsDirty(true);
       setIsCalendarOpen(false);
     } catch (err: any) {
       alert(`Error al guardar calendario: ${err}`);
@@ -619,12 +644,14 @@ export const App: React.FC = () => {
       />
 
       {/* Modals */}
-      <ProjectSettingsModal
-        isOpen={isSettingsOpen}
-        meta={projectPayload.data.meta}
-        onClose={() => setIsSettingsOpen(false)}
-        onSave={handleSaveProjectSettings}
-      />
+      {isSettingsOpen && (
+        <ProjectSettingsModal
+          isOpen={isSettingsOpen}
+          meta={projectPayload.data.meta}
+          onClose={() => setIsSettingsOpen(false)}
+          onSave={handleSaveProjectSettings}
+        />
+      )}
 
       <TaskDetailsModal
         isOpen={isTaskDetailsOpen}
