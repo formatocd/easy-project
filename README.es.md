@@ -87,10 +87,14 @@ Combina la velocidad y seguridad de **Rust** en el backend con una interfaz flui
 
 ## 🚀 Descargas e Instalación
 
-Puedes descargar el instalador oficial para Windows desde la sección de [Releases de GitHub](https://github.com/formatocd/easy-project/releases/latest).
+Los instaladores oficiales para **Windows**, **macOS** y **Linux** están disponibles en la sección de [Releases de GitHub](https://github.com/formatocd/easy-project/releases/latest):
+
+- **Windows:** `.exe` (Instalador NSIS) / `.msi`
+- **macOS:** `.dmg` (Apple Silicon)
+- **Linux:** `.deb` (Debian / Ubuntu) / `.AppImage` (Universal)
 
 ### Requisitos del Sistema
-- **Sistema Operativo:** Windows 10 / 11 (64-bit).
+- **Sistemas Operativos:** Windows 10/11 (64-bit), macOS 11+, o distribuciones Linux modernas.
 - **Espacio en disco:** ~30 MB.
 
 ---

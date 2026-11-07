@@ -87,10 +87,14 @@ By combining the raw compute performance and memory safety of a **Rust** backend
 
 ## 🚀 Downloads & Installation
 
-Pre-built Windows installers are available on the [GitHub Releases](https://github.com/formatocd/easy-project/releases/latest) page.
+Pre-built binaries for **Windows**, **macOS**, and **Linux** are available on the [GitHub Releases](https://github.com/formatocd/easy-project/releases/latest) page:
+
+- **Windows:** `.exe` (NSIS setup installer) / `.msi`
+- **macOS:** `.dmg` (Apple Silicon)
+- **Linux:** `.deb` (Debian / Ubuntu) / `.AppImage` (Universal)
 
 ### System Requirements
-- **Operating System:** Windows 10 / 11 (64-bit).
+- **Operating Systems:** Windows 10/11 (64-bit), macOS 11+, or modern Linux distribution.
 - **Disk Space:** ~30 MB.
 
 ---
