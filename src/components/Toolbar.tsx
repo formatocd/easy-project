@@ -7,6 +7,8 @@ import {
   Trash2,
   Indent,
   Outdent,
+  ArrowUp,
+  ArrowDown,
   Undo2,
   Redo2,
   BookmarkPlus,
@@ -40,6 +42,8 @@ interface ToolbarProps {
   darkMode: boolean;
   language: Language;
   hasSelectedTask: boolean;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
   onNew: () => void;
   onOpen: () => void;
   onSave: () => void;
@@ -56,6 +60,8 @@ interface ToolbarProps {
   onDeleteTask: () => void;
   onIndentTask: () => void;
   onOutdentTask: () => void;
+  onMoveTaskUp: () => void;
+  onMoveTaskDown: () => void;
   onSaveBaseline: () => void;
   onClearBaseline: () => void;
   onViewChange: (view: ActiveView) => void;
@@ -77,6 +83,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   darkMode,
   language,
   hasSelectedTask,
+  canMoveUp = true,
+  canMoveDown = true,
   onNew,
   onOpen,
   onSave,
@@ -93,6 +101,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onDeleteTask,
   onIndentTask,
   onOutdentTask,
+  onMoveTaskUp,
+  onMoveTaskDown,
   onSaveBaseline,
   onClearBaseline,
   onViewChange,
@@ -369,12 +379,12 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             disabled={!hasSelectedTask}
             className={`p-1.5 rounded shrink-0 ${
               hasSelectedTask
-                ? 'hover:bg-neutral-200 dark:hover:bg-neutral-800'
-                : 'opacity-40 cursor-not-allowed'
+                ? 'hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-700 dark:text-neutral-300'
+                : 'opacity-40 cursor-not-allowed text-neutral-400'
             }`}
-            title={t.outdent}
+            title={`${t.outdent} (Alt+←)`}
           >
-            <Outdent className="w-3.5 h-3.5 text-neutral-700 dark:text-neutral-300" />
+            <Outdent className="w-3.5 h-3.5" />
           </button>
 
           <button
@@ -382,12 +392,40 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             disabled={!hasSelectedTask}
             className={`p-1.5 rounded shrink-0 ${
               hasSelectedTask
-                ? 'hover:bg-neutral-200 dark:hover:bg-neutral-800'
-                : 'opacity-40 cursor-not-allowed'
+                ? 'hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-700 dark:text-neutral-300'
+                : 'opacity-40 cursor-not-allowed text-neutral-400'
             }`}
-            title={t.indent}
+            title={`${t.indent} (Alt+→)`}
           >
-            <Indent className="w-3.5 h-3.5 text-neutral-700 dark:text-neutral-300" />
+            <Indent className="w-3.5 h-3.5" />
+          </button>
+
+          <div className="w-[1px] h-3 bg-neutral-200 dark:bg-neutral-800 mx-0.5 shrink-0" />
+
+          <button
+            onClick={onMoveTaskUp}
+            disabled={!hasSelectedTask || !canMoveUp}
+            className={`p-1.5 rounded shrink-0 ${
+              hasSelectedTask && canMoveUp
+                ? 'hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-700 dark:text-neutral-300'
+                : 'opacity-40 cursor-not-allowed text-neutral-400'
+            }`}
+            title={`${t.moveUp} (Alt+↑)`}
+          >
+            <ArrowUp className="w-3.5 h-3.5" />
+          </button>
+
+          <button
+            onClick={onMoveTaskDown}
+            disabled={!hasSelectedTask || !canMoveDown}
+            className={`p-1.5 rounded shrink-0 ${
+              hasSelectedTask && canMoveDown
+                ? 'hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-700 dark:text-neutral-300'
+                : 'opacity-40 cursor-not-allowed text-neutral-400'
+            }`}
+            title={`${t.moveDown} (Alt+↓)`}
+          >
+            <ArrowDown className="w-3.5 h-3.5" />
           </button>
 
           <div className="w-[1px] h-4 bg-neutral-300 dark:bg-neutral-700 mx-1 shrink-0" />

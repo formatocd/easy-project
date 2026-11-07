@@ -22,6 +22,7 @@ pub struct ProjectPayload {
     pub can_undo: bool,
     pub can_redo: bool,
     pub calculation_ms: f64,
+    pub active_task_id: Option<i64>,
 }
 
 pub struct AppState {
@@ -53,6 +54,16 @@ impl AppState {
 }
 
 pub fn build_payload(data: &ProjectData, can_undo: bool, can_redo: bool, ms: f64) -> ProjectPayload {
+    build_payload_with_active(data, can_undo, can_redo, ms, None)
+}
+
+pub fn build_payload_with_active(
+    data: &ProjectData,
+    can_undo: bool,
+    can_redo: bool,
+    ms: f64,
+    active_task_id: Option<i64>,
+) -> ProjectPayload {
     let mut task_dtos = Vec::with_capacity(data.tasks.len());
 
     let mut id_to_parent: HashMap<i64, Option<i64>> = HashMap::new();
@@ -103,6 +114,7 @@ pub fn build_payload(data: &ProjectData, can_undo: bool, can_redo: bool, ms: f64
         can_undo,
         can_redo,
         calculation_ms: ms,
+        active_task_id,
     }
 }
 
@@ -261,26 +273,30 @@ pub fn add_task(
     state.push_undo(&data);
 
     let next_id = data.tasks.iter().map(|t| t.id).max().unwrap_or(0) + 1;
-    let mut sort_order = next_id as i32;
-    let mut parent_id = None;
+    let mut insert_idx = data.tasks.len();
 
     if let Some(aid) = after_id {
-        if let Some(prev) = data.tasks.iter().find(|t| t.id == aid) {
-            sort_order = prev.sort_order + 1;
-            parent_id = prev.parent_id;
-        }
-        for t in data.tasks.iter_mut() {
-            if t.sort_order >= sort_order {
-                t.sort_order += 1;
-            }
+        if let Some(pos) = data.tasks.iter().position(|t| t.id == aid) {
+            insert_idx = pos + 1;
         }
     }
+
+    let parent_id = if insert_idx > 0 && insert_idx <= data.tasks.len() {
+        let prev = &data.tasks[insert_idx - 1];
+        if prev.is_summary {
+            Some(prev.id)
+        } else {
+            prev.parent_id
+        }
+    } else {
+        None
+    };
 
     let new_task = Task {
         id: next_id,
         parent_id,
         wbs_code: "".to_string(),
-        sort_order,
+        sort_order: (insert_idx + 1) as i32,
         name: name.unwrap_or_else(|| format!("Tarea {}", next_id)),
         duration_hours: 8.0,
         start_date: data.meta.project_start_date.clone(),
@@ -296,13 +312,16 @@ pub fn add_task(
         notes: None,
     };
 
-    data.tasks.push(new_task);
-    data.tasks.sort_by_key(|t| (t.sort_order, t.id));
+    data.tasks.insert(insert_idx, new_task);
+
+    // Normalize all sort_orders and IDs to strictly correlative 1..=len
+    renumber_tasks(&mut data);
+    let new_task_id = (insert_idx + 1) as i64;
 
     let res = Scheduler::recalculate(&mut data);
     let can_undo = !state.undo_stack.lock().unwrap().is_empty();
     let can_redo = !state.redo_stack.lock().unwrap().is_empty();
-    Ok(build_payload(&data, can_undo, can_redo, res.elapsed_ms))
+    Ok(build_payload_with_active(&data, can_undo, can_redo, res.elapsed_ms, Some(new_task_id)))
 }
 
 
@@ -340,9 +359,21 @@ pub fn add_tasks_batch(
     }
 
     let mut next_id = data.tasks.iter().map(|t| t.id).max().unwrap_or(0) + 1;
-    let parent_id = after_id.and_then(|aid| {
-        data.tasks.iter().find(|t| t.id == aid).and_then(|t| t.parent_id)
-    });
+    let insert_idx = match after_id {
+        Some(aid) => data.tasks.iter().position(|t| t.id == aid).map(|p| p + 1).unwrap_or(data.tasks.len()),
+        None => data.tasks.len(),
+    };
+
+    let parent_id = if insert_idx > 0 && insert_idx <= data.tasks.len() {
+        let prev = &data.tasks[insert_idx - 1];
+        if prev.is_summary {
+            Some(prev.id)
+        } else {
+            prev.parent_id
+        }
+    } else {
+        None
+    };
 
     for input in tasks {
         let trimmed_name = input.name.trim();
@@ -379,6 +410,9 @@ pub fn add_tasks_batch(
     }
 
     data.tasks.sort_by_key(|t| (t.sort_order, t.id));
+    for (idx, t) in data.tasks.iter_mut().enumerate() {
+        t.sort_order = (idx + 1) as i32;
+    }
 
     let res = Scheduler::recalculate(&mut data);
     let can_undo = !state.undo_stack.lock().unwrap().is_empty();
@@ -418,6 +452,10 @@ pub fn delete_tasks(state: State<AppState>, task_ids: Vec<i64>) -> Result<Projec
     data.tasks.retain(|t| !to_delete.contains(&t.id));
     data.dependencies
         .retain(|d| !to_delete.contains(&d.predecessor_id) && !to_delete.contains(&d.successor_id));
+
+    // Normalize sort order and IDs after deletion
+    data.tasks.sort_by_key(|t| (t.sort_order, t.id));
+    renumber_tasks(&mut data);
 
     let res = Scheduler::recalculate(&mut data);
     let can_undo = !state.undo_stack.lock().unwrap().is_empty();
@@ -508,11 +546,48 @@ pub fn outdent_tasks(state: State<AppState>, task_ids: Vec<i64>) -> Result<Proje
         data.tasks.iter().map(|t| (t.id, t.parent_id)).collect();
 
     let id_set: HashSet<i64> = task_ids.into_iter().collect();
-    for t in data.tasks.iter_mut() {
+    let mut outdented_info: Vec<(i64, usize, Option<i64>)> = Vec::new();
+
+    for (idx, t) in data.tasks.iter_mut().enumerate() {
         if id_set.contains(&t.id) {
             if let Some(pid) = t.parent_id {
+                let old_pid = t.parent_id;
                 let grandparent = parent_map.get(&pid).copied().flatten();
                 t.parent_id = grandparent;
+                outdented_info.push((t.id, idx, old_pid));
+            }
+        }
+    }
+
+    // When a task is outdented, any unselected siblings immediately following it
+    // preserve their indentation by becoming children of the outdented task
+    for (outdented_id, outdented_idx, old_pid) in outdented_info {
+        if old_pid.is_none() {
+            continue;
+        }
+        for k in (outdented_idx + 1)..data.tasks.len() {
+            if id_set.contains(&data.tasks[k].id) {
+                break;
+            }
+            if data.tasks[k].parent_id == old_pid {
+                data.tasks[k].parent_id = Some(outdented_id);
+            } else {
+                let curr_pid = data.tasks[k].parent_id;
+                let is_descendant = curr_pid == Some(outdented_id) || {
+                    let mut curr = curr_pid;
+                    let mut found = false;
+                    while let Some(p) = curr {
+                        if p == outdented_id {
+                            found = true;
+                            break;
+                        }
+                        curr = parent_map.get(&p).copied().flatten();
+                    }
+                    found
+                };
+                if !is_descendant {
+                    break;
+                }
             }
         }
     }
@@ -521,6 +596,316 @@ pub fn outdent_tasks(state: State<AppState>, task_ids: Vec<i64>) -> Result<Proje
     let can_undo = !state.undo_stack.lock().unwrap().is_empty();
     let can_redo = !state.redo_stack.lock().unwrap().is_empty();
     Ok(build_payload(&data, can_undo, can_redo, res.elapsed_ms))
+}
+
+fn get_task_family_block(tasks: &[Task], root_id: i64) -> (usize, usize) {
+    let mut family_ids = HashSet::new();
+    family_ids.insert(root_id);
+
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for t in tasks {
+            if let Some(pid) = t.parent_id {
+                if family_ids.contains(&pid) && !family_ids.contains(&t.id) {
+                    family_ids.insert(t.id);
+                    changed = true;
+                }
+            }
+        }
+    }
+
+    let indices: Vec<usize> = tasks
+        .iter()
+        .enumerate()
+        .filter(|(_, t)| family_ids.contains(&t.id))
+        .map(|(i, _)| i)
+        .collect();
+
+    if indices.is_empty() {
+        (0, 0)
+    } else {
+        (indices[0], indices[indices.len() - 1])
+    }
+}
+
+fn get_task_depth(tasks: &[Task], task_id: i64) -> usize {
+    let id_to_parent: HashMap<i64, Option<i64>> = tasks.iter().map(|t| (t.id, t.parent_id)).collect();
+    let mut depth = 0;
+    let mut curr = id_to_parent.get(&task_id).copied().flatten();
+    while let Some(pid) = curr {
+        depth += 1;
+        curr = id_to_parent.get(&pid).copied().flatten();
+        if depth > 50 {
+            break;
+        }
+    }
+    depth
+}
+
+fn renumber_tasks(data: &mut ProjectData) -> HashMap<i64, i64> {
+    let mut old_to_new: HashMap<i64, i64> = HashMap::new();
+    for (idx, task) in data.tasks.iter().enumerate() {
+        let new_id = (idx + 1) as i64;
+        old_to_new.insert(task.id, new_id);
+    }
+
+    for (idx, task) in data.tasks.iter_mut().enumerate() {
+        let new_id = (idx + 1) as i64;
+        task.id = new_id;
+        task.sort_order = (idx + 1) as i32;
+        if let Some(pid) = task.parent_id {
+            task.parent_id = old_to_new.get(&pid).copied();
+        }
+    }
+
+    for dep in data.dependencies.iter_mut() {
+        if let Some(&new_pred) = old_to_new.get(&dep.predecessor_id) {
+            dep.predecessor_id = new_pred;
+        }
+        if let Some(&new_succ) = old_to_new.get(&dep.successor_id) {
+            dep.successor_id = new_succ;
+        }
+    }
+
+    old_to_new
+}
+
+#[tauri::command]
+pub fn move_task_up(state: State<AppState>, task_id: i64) -> Result<ProjectPayload, String> {
+    let mut data = state.current.lock().unwrap();
+
+    let (start_idx, end_idx) = get_task_family_block(&data.tasks, task_id);
+    if start_idx == 0 || end_idx >= data.tasks.len() {
+        let can_undo = !state.undo_stack.lock().unwrap().is_empty();
+        let can_redo = !state.redo_stack.lock().unwrap().is_empty();
+        return Ok(build_payload(&data, can_undo, can_redo, 0.0));
+    }
+
+    let target_depth = get_task_depth(&data.tasks, task_id);
+
+    // Look backwards for a task with depth == target_depth (same level)
+    // OR depth == target_depth - 1 (immediate superior level / container)
+    let mut prev_target_idx = None;
+    for i in (0..start_idx).rev() {
+        let d = get_task_depth(&data.tasks, data.tasks[i].id);
+        if d == target_depth || (target_depth > 0 && d == target_depth - 1) {
+            prev_target_idx = Some(i);
+            break;
+        }
+    }
+
+    let prev_idx = match prev_target_idx {
+        Some(idx) => idx,
+        None => {
+            let can_undo = !state.undo_stack.lock().unwrap().is_empty();
+            let can_redo = !state.redo_stack.lock().unwrap().is_empty();
+            return Ok(build_payload(&data, can_undo, can_redo, 0.0));
+        }
+    };
+
+    let prev_d = get_task_depth(&data.tasks, data.tasks[prev_idx].id);
+
+    // If prev_idx is at immediate superior level and at index 0, we cannot move above the root of the project!
+    if prev_d < target_depth && prev_idx == 0 {
+        let can_undo = !state.undo_stack.lock().unwrap().is_empty();
+        let can_redo = !state.redo_stack.lock().unwrap().is_empty();
+        return Ok(build_payload(&data, can_undo, can_redo, 0.0));
+    }
+
+    state.push_undo(&data);
+
+    let prev_task = &data.tasks[prev_idx];
+    let (insert_idx, new_parent_id) = if prev_d == target_depth {
+        if prev_task.parent_id == data.tasks[start_idx].parent_id {
+            // Sibling: move before prev_task's family block
+            (prev_idx, data.tasks[start_idx].parent_id)
+        } else {
+            // Last task of same depth in previous parent: insert after that family
+            let (_, prev_family_end) = get_task_family_block(&data.tasks, prev_task.id);
+            (prev_family_end + 1, prev_task.parent_id)
+        }
+    } else {
+        // prev_d == target_depth - 1 (Crossing upward out of current parent)
+        // Move before prev_idx (the container) into the section above it
+        let superior_neighbor = &data.tasks[prev_idx - 1];
+        let superior_neighbor_d = get_task_depth(&data.tasks, superior_neighbor.id);
+        let adopted_parent = if superior_neighbor_d == target_depth {
+            superior_neighbor.parent_id
+        } else {
+            Some(superior_neighbor.id)
+        };
+        (prev_idx, adopted_parent)
+    };
+
+    let family_len = end_idx - start_idx + 1;
+    let mut family_tasks = Vec::with_capacity(family_len);
+    for _ in 0..family_len {
+        family_tasks.push(data.tasks.remove(start_idx));
+    }
+    family_tasks[0].parent_id = new_parent_id;
+
+    for (offset, t) in family_tasks.into_iter().enumerate() {
+        data.tasks.insert(insert_idx + offset, t);
+    }
+
+    renumber_tasks(&mut data);
+    let new_active_id = (insert_idx + 1) as i64;
+
+    crate::engine::wbs::WbsCalculator::repair_hierarchy(&mut data.tasks);
+
+    let res = Scheduler::recalculate(&mut data);
+    let can_undo = !state.undo_stack.lock().unwrap().is_empty();
+    let can_redo = !state.redo_stack.lock().unwrap().is_empty();
+    Ok(build_payload_with_active(&data, can_undo, can_redo, res.elapsed_ms, Some(new_active_id)))
+}
+
+#[tauri::command]
+pub fn move_task_down(state: State<AppState>, task_id: i64) -> Result<ProjectPayload, String> {
+    let mut data = state.current.lock().unwrap();
+
+    let (start_idx, end_idx) = get_task_family_block(&data.tasks, task_id);
+    if end_idx + 1 >= data.tasks.len() {
+        let can_undo = !state.undo_stack.lock().unwrap().is_empty();
+        let can_redo = !state.redo_stack.lock().unwrap().is_empty();
+        return Ok(build_payload(&data, can_undo, can_redo, 0.0));
+    }
+
+    let target_depth = get_task_depth(&data.tasks, task_id);
+
+    // Look forwards for a task with depth == target_depth (same level)
+    // OR depth == target_depth - 1 (immediate superior level / container)
+    let mut next_target_idx = None;
+    for i in (end_idx + 1)..data.tasks.len() {
+        let d = get_task_depth(&data.tasks, data.tasks[i].id);
+        if d == target_depth || (target_depth > 0 && d == target_depth - 1) {
+            next_target_idx = Some(i);
+            break;
+        }
+    }
+
+    let next_idx = match next_target_idx {
+        Some(idx) => idx,
+        None => {
+            let can_undo = !state.undo_stack.lock().unwrap().is_empty();
+            let can_redo = !state.redo_stack.lock().unwrap().is_empty();
+            return Ok(build_payload(&data, can_undo, can_redo, 0.0));
+        }
+    };
+
+    state.push_undo(&data);
+
+    let next_task = &data.tasks[next_idx];
+    let next_d = get_task_depth(&data.tasks, next_task.id);
+    let family_len = end_idx - start_idx + 1;
+
+    let (insert_idx, new_parent_id) = if next_d == target_depth {
+        if next_task.parent_id == data.tasks[start_idx].parent_id {
+            // Sibling: move after next_task's family block
+            let (_, next_family_end) = get_task_family_block(&data.tasks, next_task.id);
+            (next_family_end - family_len + 1, data.tasks[start_idx].parent_id)
+        } else {
+            // Crossing into next parent: insert right before next_task
+            (next_idx - family_len, next_task.parent_id)
+        }
+    } else {
+        // next_d == target_depth - 1 (Crossing downward into the next section container)
+        // Insert right after next_task as its child
+        let shifted_next_idx = next_idx - family_len;
+        (shifted_next_idx + 1, Some(next_task.id))
+    };
+
+    let mut family_tasks = Vec::with_capacity(family_len);
+    for _ in 0..family_len {
+        family_tasks.push(data.tasks.remove(start_idx));
+    }
+    family_tasks[0].parent_id = new_parent_id;
+
+    for (offset, t) in family_tasks.into_iter().enumerate() {
+        data.tasks.insert(insert_idx + offset, t);
+    }
+
+    renumber_tasks(&mut data);
+    let new_active_id = (insert_idx + 1) as i64;
+
+    crate::engine::wbs::WbsCalculator::repair_hierarchy(&mut data.tasks);
+
+    let res = Scheduler::recalculate(&mut data);
+    let can_undo = !state.undo_stack.lock().unwrap().is_empty();
+    let can_redo = !state.redo_stack.lock().unwrap().is_empty();
+    Ok(build_payload_with_active(&data, can_undo, can_redo, res.elapsed_ms, Some(new_active_id)))
+}
+
+#[tauri::command]
+pub fn move_task_to(
+    state: State<AppState>,
+    source_id: i64,
+    target_id: i64,
+) -> Result<ProjectPayload, String> {
+    if source_id == target_id {
+        return get_project(state);
+    }
+
+    let mut data = state.current.lock().unwrap();
+
+    let (src_start, src_end) = get_task_family_block(&data.tasks, source_id);
+    let src_depth = get_task_depth(&data.tasks, source_id);
+
+    let target_idx = match data.tasks.iter().position(|t| t.id == target_id) {
+        Some(idx) => idx,
+        None => {
+            let can_undo = !state.undo_stack.lock().unwrap().is_empty();
+            let can_redo = !state.redo_stack.lock().unwrap().is_empty();
+            return Ok(build_payload(&data, can_undo, can_redo, 0.0));
+        }
+    };
+
+    let tgt_depth = get_task_depth(&data.tasks, target_id);
+    let is_valid_drop = src_depth == tgt_depth || (src_depth > 0 && tgt_depth == src_depth - 1);
+    if !is_valid_drop {
+        let can_undo = !state.undo_stack.lock().unwrap().is_empty();
+        let can_redo = !state.redo_stack.lock().unwrap().is_empty();
+        return Ok(build_payload(&data, can_undo, can_redo, 0.0));
+    }
+
+    state.push_undo(&data);
+
+    let target_task = &data.tasks[target_idx];
+    let new_parent_id = if tgt_depth == src_depth {
+        target_task.parent_id
+    } else {
+        Some(target_task.id)
+    };
+
+    let family_len = src_end - src_start + 1;
+    let mut family_tasks = Vec::with_capacity(family_len);
+    for _ in 0..family_len {
+        family_tasks.push(data.tasks.remove(src_start));
+    }
+    family_tasks[0].parent_id = new_parent_id;
+
+    let new_target_idx = data.tasks.iter().position(|t| t.id == target_id).unwrap();
+
+    let insert_idx = if src_start < new_target_idx {
+        let (_, tgt_family_end) = get_task_family_block(&data.tasks, target_id);
+        (tgt_family_end + 1).min(data.tasks.len())
+    } else {
+        new_target_idx
+    };
+
+    for (offset, t) in family_tasks.into_iter().enumerate() {
+        data.tasks.insert(insert_idx + offset, t);
+    }
+
+    renumber_tasks(&mut data);
+    let new_active_id = (insert_idx + 1) as i64;
+
+    crate::engine::wbs::WbsCalculator::repair_hierarchy(&mut data.tasks);
+
+    let res = Scheduler::recalculate(&mut data);
+    let can_undo = !state.undo_stack.lock().unwrap().is_empty();
+    let can_redo = !state.redo_stack.lock().unwrap().is_empty();
+    Ok(build_payload_with_active(&data, can_undo, can_redo, res.elapsed_ms, Some(new_active_id)))
 }
 
 
@@ -754,4 +1139,9 @@ pub fn get_initial_config(app: tauri::AppHandle) -> InitialConfig {
 #[tauri::command]
 pub fn set_window_title(window: tauri::Window, title: String) -> Result<(), String> {
     window.set_title(&title).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn force_close_window(app: tauri::AppHandle) {
+    app.exit(0);
 }

@@ -105,6 +105,7 @@ export interface ProjectPayload {
   can_undo: boolean;
   can_redo: boolean;
   calculation_ms: number;
+  active_task_id?: number | null;
 }
 
 export type ZoomLevel = 'HOURS' | 'DAYS' | 'WEEKS' | 'MONTHS' | 'YEARS';

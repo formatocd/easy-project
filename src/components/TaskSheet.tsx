@@ -1,5 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ChevronRight, ChevronDown, Diamond, FolderTree, CheckSquare, Plus } from 'lucide-react';
+import {
+  ChevronRight,
+  ChevronDown,
+  Diamond,
+  FolderTree,
+  CheckSquare,
+  Plus,
+  GripVertical,
+  ArrowUp,
+  ArrowDown,
+  Indent,
+  Outdent,
+  Trash2,
+  ListTodo,
+} from 'lucide-react';
 import { TaskDto, Task } from '../types/project';
 import { formatDateTime, formatDuration, parseDurationInput } from '../utils/formatters';
 import { Language, translations } from '../i18n/translations';
@@ -16,8 +30,14 @@ interface TaskSheetProps {
   onUpdateTask: (task: Task) => void;
   onSetTasksDuration: (taskIds: number[], hours: number) => void;
   onSetPredecessors: (taskId: number, expr: string) => void;
-  onAddTask: (name?: string) => void;
+  onAddTask: (name?: string, afterId?: number | null) => void;
   onAddTasksBatch: (tasks: { name: string; duration_hours?: number }[]) => void;
+  onMoveTaskTo?: (sourceId: number, targetId: number) => void;
+  onMoveTaskUp?: () => void;
+  onMoveTaskDown?: () => void;
+  onIndentTask?: () => void;
+  onOutdentTask?: () => void;
+  onDeleteTask?: () => void;
   scrollRef?: React.RefObject<HTMLDivElement | null>;
   onScroll?: (e: React.UIEvent<HTMLDivElement>) => void;
 }
@@ -38,6 +58,12 @@ export const TaskSheet: React.FC<TaskSheetProps> = ({
   onSetPredecessors,
   onAddTask,
   onAddTasksBatch,
+  onMoveTaskTo,
+  onMoveTaskUp,
+  onMoveTaskDown,
+  onIndentTask,
+  onOutdentTask,
+  onDeleteTask,
   scrollRef,
   onScroll,
 }) => {
@@ -48,6 +74,22 @@ export const TaskSheet: React.FC<TaskSheetProps> = ({
   const [containerWidth, setContainerWidth] = useState<number>(520);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const quickInputRef = useRef<HTMLInputElement | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; taskId: number } | null>(null);
+  const [dragOverTaskId, setDragOverTaskId] = useState<number | null>(null);
+  const [draggingTaskId, setDraggingTaskId] = useState<number | null>(null);
+
+  useEffect(() => {
+    const handleClick = () => setContextMenu(null);
+    window.addEventListener('click', handleClick);
+    return () => window.removeEventListener('click', handleClick);
+  }, []);
+
+  const handleContextMenu = (e: React.MouseEvent, taskId: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onSelectTask(taskId, e);
+    setContextMenu({ x: e.clientX, y: e.clientY, taskId });
+  };
 
   // Measure visible pane width to auto-center empty state banner
   useEffect(() => {
@@ -187,10 +229,10 @@ export const TaskSheet: React.FC<TaskSheetProps> = ({
     e.preventDefault();
     const name = quickTaskName.trim();
     if (name) {
-      onAddTask(name);
+      onAddTask(name, null);
       setQuickTaskName('');
     } else {
-      onAddTask();
+      onAddTask(undefined, null);
     }
     // Keep focus on input for fast repeated entry
     setTimeout(() => {
@@ -261,16 +303,75 @@ export const TaskSheet: React.FC<TaskSheetProps> = ({
                 key={task.id}
                 onClick={(e) => onSelectTask(task.id, e)}
                 onDoubleClick={() => onOpenTaskDetails(task.id)}
-                className={`border-b border-neutral-200 dark:border-neutral-800 transition cursor-pointer select-none ${
+                onContextMenu={(e) => handleContextMenu(e, task.id)}
+                draggable={!isEditing}
+                onDragStart={(e) => {
+                  setDraggingTaskId(task.id);
+                  e.dataTransfer.setData('text/plain', String(task.id));
+                  e.dataTransfer.effectAllowed = 'move';
+                }}
+                onDragEnd={() => {
+                  setDraggingTaskId(null);
+                  setDragOverTaskId(null);
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  if (draggingTaskId !== null) {
+                    const draggingTask = tasks.find((t) => t.id === draggingTaskId);
+                    const isValidDrop = draggingTask && (
+                      task.depth === draggingTask.depth ||
+                      (draggingTask.depth > 0 && task.depth === draggingTask.depth - 1)
+                    ) && task.id !== draggingTaskId;
+
+                    if (isValidDrop) {
+                      e.dataTransfer.dropEffect = 'move';
+                      if (dragOverTaskId !== task.id) {
+                        setDragOverTaskId(task.id);
+                      }
+                      return;
+                    }
+                  }
+                  e.dataTransfer.dropEffect = 'none';
+                }}
+                onDragLeave={() => {
+                  if (dragOverTaskId === task.id) {
+                    setDragOverTaskId(null);
+                  }
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragOverTaskId(null);
+                  setDraggingTaskId(null);
+                  const sourceId = Number(e.dataTransfer.getData('text/plain'));
+                  const sourceTask = tasks.find((t) => t.id === sourceId);
+                  const isValidDrop = sourceTask && (
+                    task.depth === sourceTask.depth ||
+                    (sourceTask.depth > 0 && task.depth === sourceTask.depth - 1)
+                  );
+                  if (sourceId && sourceId !== task.id && isValidDrop && onMoveTaskTo) {
+                    onMoveTaskTo(sourceId, task.id);
+                  }
+                }}
+                className={`border-b transition cursor-pointer select-none ${
+                  dragOverTaskId === task.id
+                    ? 'border-t-2 border-t-blue-500 border-b-blue-500 bg-blue-50/70 dark:bg-blue-950/40'
+                    : 'border-b-neutral-200 dark:border-b-neutral-800'
+                } ${
                   isSelected
                     ? 'bg-blue-100 dark:bg-blue-950/60 text-blue-950 dark:text-blue-100 font-medium'
                     : 'hover:bg-neutral-50 dark:hover:bg-neutral-900/60'
                 }`}
                 style={{ height: '32px' }}
               >
-                {/* ID */}
-                <td className="px-2 py-0 h-8 border-r border-neutral-200 dark:border-neutral-800 text-center align-middle text-neutral-500 dark:text-neutral-400 text-[11px]">
-                  {task.id}
+                {/* ID with drag grip indicator */}
+                <td
+                  className="px-1 py-0 h-8 border-r border-neutral-200 dark:border-neutral-800 text-center align-middle text-neutral-500 dark:text-neutral-400 text-[11px] cursor-grab active:cursor-grabbing group/id"
+                  title="Arrastra para mover de posición (o clic derecho para menú de opciones)"
+                >
+                  <div className="flex items-center justify-center gap-0.5">
+                    <GripVertical className="w-3 h-3 text-neutral-400 opacity-0 group-hover/id:opacity-100 transition shrink-0" />
+                    <span>{task.id}</span>
+                  </div>
                 </td>
 
                 {/* Indicator / Type */}
@@ -466,6 +567,139 @@ export const TaskSheet: React.FC<TaskSheetProps> = ({
           </tr>
         </tbody>
       </table>
+
+      {/* Floating Context Menu on Right Click */}
+      {contextMenu && (
+        <div
+          style={{ top: Math.min(contextMenu.y, window.innerHeight - 240), left: Math.min(contextMenu.x, window.innerWidth - 220) }}
+          className="fixed z-50 min-w-[210px] bg-white dark:bg-neutral-900 border border-neutral-300 dark:border-neutral-700 rounded-lg shadow-2xl py-1 text-xs text-neutral-800 dark:text-neutral-200 select-none animate-in fade-in zoom-in-95 duration-100"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="px-3 py-1 font-semibold text-[11px] text-neutral-400 border-b border-neutral-200 dark:border-neutral-800 mb-1">
+            Tarea #{contextMenu.taskId}
+          </div>
+
+          {(() => {
+            const contextTask = tasks.find((t) => t.id === contextMenu.taskId);
+            const contextIdx = tasks.findIndex((t) => t.id === contextMenu.taskId);
+            const canContextMoveUp = contextTask
+              ? (contextTask.depth === 0
+                  ? tasks.some((t, idx) => idx < contextIdx && t.depth === 0)
+                  : tasks.some((t, idx) => idx < contextIdx && (t.depth === contextTask.depth || (t.depth === contextTask.depth - 1 && idx > 0))))
+              : false;
+            const canContextMoveDown = contextTask
+              ? (contextTask.depth === 0
+                  ? tasks.some((t, idx) => idx > contextIdx && t.depth === 0)
+                  : tasks.some((t, idx) => idx > contextIdx && (t.depth === contextTask.depth || t.depth === contextTask.depth - 1)))
+              : false;
+
+            return (
+              <>
+                <button
+                  onClick={() => {
+                    if (!canContextMoveUp) return;
+                    setContextMenu(null);
+                    onMoveTaskUp?.();
+                  }}
+                  disabled={!canContextMoveUp}
+                  className={`w-full text-left px-3 py-1.5 flex items-center justify-between transition ${
+                    canContextMoveUp
+                      ? 'hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-700 dark:text-neutral-200'
+                      : 'opacity-40 cursor-not-allowed text-neutral-400'
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <ArrowUp className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                    Mover arriba
+                  </span>
+                  <kbd className="text-[10px] text-neutral-400 font-mono">Alt+↑</kbd>
+                </button>
+
+                <button
+                  onClick={() => {
+                    if (!canContextMoveDown) return;
+                    setContextMenu(null);
+                    onMoveTaskDown?.();
+                  }}
+                  disabled={!canContextMoveDown}
+                  className={`w-full text-left px-3 py-1.5 flex items-center justify-between transition ${
+                    canContextMoveDown
+                      ? 'hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-700 dark:text-neutral-200'
+                      : 'opacity-40 cursor-not-allowed text-neutral-400'
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <ArrowDown className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                    Mover abajo
+                  </span>
+                  <kbd className="text-[10px] text-neutral-400 font-mono">Alt+↓</kbd>
+                </button>
+              </>
+            );
+          })()}
+
+          <div className="my-1 border-t border-neutral-200 dark:border-neutral-800" />
+
+          <button
+            onClick={() => {
+              setContextMenu(null);
+              onIndentTask?.();
+            }}
+            className="w-full text-left px-3 py-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 flex items-center justify-between transition"
+          >
+            <span className="flex items-center gap-2">
+              <Indent className="w-3.5 h-3.5 text-neutral-600 dark:text-neutral-400" />
+              Sangría derecha (Indentar)
+            </span>
+            <kbd className="text-[10px] text-neutral-400 font-mono">Alt+→</kbd>
+          </button>
+
+          <button
+            onClick={() => {
+              setContextMenu(null);
+              onOutdentTask?.();
+            }}
+            className="w-full text-left px-3 py-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 flex items-center justify-between transition"
+          >
+            <span className="flex items-center gap-2">
+              <Outdent className="w-3.5 h-3.5 text-neutral-600 dark:text-neutral-400" />
+              Sangría izquierda (Desindentar)
+            </span>
+            <kbd className="text-[10px] text-neutral-400 font-mono">Alt+←</kbd>
+          </button>
+
+          <div className="my-1 border-t border-neutral-200 dark:border-neutral-800" />
+
+          <button
+            onClick={() => {
+              const tid = contextMenu.taskId;
+              setContextMenu(null);
+              onOpenTaskDetails(tid);
+            }}
+            className="w-full text-left px-3 py-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 flex items-center justify-between transition"
+          >
+            <span className="flex items-center gap-2">
+              <ListTodo className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+              Información de la tarea...
+            </span>
+            <kbd className="text-[10px] text-neutral-400 font-mono">F2</kbd>
+          </button>
+
+          <button
+            onClick={() => {
+              setContextMenu(null);
+              onDeleteTask?.();
+            }}
+            className="w-full text-left px-3 py-1.5 hover:bg-red-50 dark:hover:bg-red-950/60 text-red-600 dark:text-red-400 flex items-center justify-between transition"
+          >
+            <span className="flex items-center gap-2">
+              <Trash2 className="w-3.5 h-3.5" />
+              Eliminar tarea
+            </span>
+            <kbd className="text-[10px] text-red-400 font-mono">Supr</kbd>
+          </button>
+        </div>
+      )}
     </div>
   );
 };

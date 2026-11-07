@@ -84,14 +84,20 @@ impl Scheduler {
 
         match data.meta.schedule_from {
             ScheduleFrom::Start => {
-                Self::schedule_forward(
-                    &mut data.tasks,
-                    &order,
-                    &id_to_index,
-                    &incoming_deps,
-                    &calc,
-                    proj_start_normalized,
-                );
+                for _ in 0..10 {
+                    let changed = Self::schedule_forward(
+                        &mut data.tasks,
+                        &order,
+                        &id_to_index,
+                        &incoming_deps,
+                        &calc,
+                        proj_start_normalized,
+                    );
+                    WbsCalculator::update_summary_tasks(&mut data.tasks, &calc);
+                    if !changed {
+                        break;
+                    }
+                }
             }
             ScheduleFrom::Finish => {
                 let proj_finish_dt = data
@@ -109,11 +115,9 @@ impl Scheduler {
                     &calc,
                     proj_finish_dt,
                 );
+                WbsCalculator::update_summary_tasks(&mut data.tasks, &calc);
             }
         }
-
-        // 5. Update summary tasks (dates, duration and % complete)
-        WbsCalculator::update_summary_tasks(&mut data.tasks, &calc);
 
         // 6. Update project finish date in metadata
         let mut max_finish: Option<NaiveDateTime> = None;
@@ -137,6 +141,19 @@ impl Scheduler {
         }
     }
 
+    fn parse_date_robust(s: &str, fallback: NaiveDateTime) -> NaiveDateTime {
+        let clean = s.trim();
+        NaiveDateTime::parse_from_str(clean, "%Y-%m-%dT%H:%M:%S")
+            .or_else(|_| NaiveDateTime::parse_from_str(clean, "%Y-%m-%d %H:%M:%S"))
+            .or_else(|_| NaiveDateTime::parse_from_str(clean, "%Y-%m-%dT%H:%M:%SZ"))
+            .or_else(|_| chrono::DateTime::parse_from_rfc3339(clean).map(|d| d.naive_utc()))
+            .or_else(|_| {
+                chrono::NaiveDate::parse_from_str(clean, "%Y-%m-%d")
+                    .map(|d| d.and_hms_opt(8, 0, 0).unwrap())
+            })
+            .unwrap_or(fallback)
+    }
+
     fn schedule_forward(
         tasks: &mut [Task],
         order: &[i64],
@@ -144,7 +161,9 @@ impl Scheduler {
         incoming_deps: &HashMap<i64, Vec<&Dependency>>,
         calc: &CalendarCalculator,
         proj_start_dt: NaiveDateTime,
-    ) {
+    ) -> bool {
+        let mut any_changed = false;
+
         // Find which tasks are summary tasks: their dates are computed from their children
         let summary_ids: HashSet<i64> = tasks
             .iter()
@@ -165,7 +184,7 @@ impl Scheduler {
 
             let mut earliest_start = proj_start_dt;
 
-            // Check incoming dependencies
+            // 1. Check direct incoming dependencies
             if let Some(deps) = incoming_deps.get(&task_id) {
                 for dep in deps {
                     let pred_idx = match id_to_index.get(&dep.predecessor_id) {
@@ -174,10 +193,17 @@ impl Scheduler {
                     };
                     let pred = &tasks[pred_idx];
 
-                    let pred_start = NaiveDateTime::parse_from_str(&pred.start_date, "%Y-%m-%dT%H:%M:%S")
-                        .unwrap_or(proj_start_dt);
-                    let pred_finish = NaiveDateTime::parse_from_str(&pred.finish_date, "%Y-%m-%dT%H:%M:%S")
-                        .unwrap_or(proj_start_dt);
+                    let pred_start = Self::parse_date_robust(&pred.start_date, proj_start_dt);
+                    let pred_finish = if pred.is_summary {
+                        let max_child = tasks
+                            .iter()
+                            .filter(|t| t.parent_id == Some(pred.id))
+                            .map(|t| Self::parse_date_robust(&t.finish_date, proj_start_dt))
+                            .max();
+                        max_child.unwrap_or_else(|| Self::parse_date_robust(&pred.finish_date, proj_start_dt))
+                    } else {
+                        Self::parse_date_robust(&pred.finish_date, proj_start_dt)
+                    };
 
                     let req_start = match dep.dep_type {
                         DependencyType::FS => {
@@ -195,7 +221,6 @@ impl Scheduler {
                             }
                         }
                         DependencyType::FF => {
-                            // finish >= pred_finish + lag => start = (pred_finish + lag) - duration
                             let target_finish = if dep.lag_hours >= 0.0 {
                                 calc.add_working_hours(pred_finish, dep.lag_hours)
                             } else {
@@ -204,7 +229,6 @@ impl Scheduler {
                             calc.subtract_working_hours(target_finish, tasks[task_idx].duration_hours)
                         }
                         DependencyType::SF => {
-                            // finish >= pred_start + lag => start = (pred_start + lag) - duration
                             let target_finish = if dep.lag_hours >= 0.0 {
                                 calc.add_working_hours(pred_start, dep.lag_hours)
                             } else {
@@ -218,19 +242,37 @@ impl Scheduler {
                 }
             }
 
-            // Apply constraints (e.g., SNET - Start No Earlier Than, MSO - Must Start On)
+            // 2. Check if parent summary task has incoming dependencies that constrain this task
+            let mut curr_parent_id = tasks[task_idx].parent_id;
+            while let Some(pid) = curr_parent_id {
+                if let Some(parent_deps) = incoming_deps.get(&pid) {
+                    for dep in parent_deps {
+                        if let Some(&pred_idx) = id_to_index.get(&dep.predecessor_id) {
+                            let pred = &tasks[pred_idx];
+                            let pred_finish = Self::parse_date_robust(&pred.finish_date, proj_start_dt);
+                            let req = match dep.dep_type {
+                                DependencyType::FS => calc.add_working_hours(pred_finish, dep.lag_hours),
+                                _ => pred_finish,
+                            };
+                            earliest_start = earliest_start.max(req);
+                        }
+                    }
+                }
+                curr_parent_id = tasks.iter().find(|t| t.id == pid).and_then(|t| t.parent_id);
+            }
+
+            // 3. Apply constraints (e.g., SNET - Start No Earlier Than, MSO - Must Start On)
             if let Some(ref c_type) = tasks[task_idx].constraint_type {
                 if let Some(ref c_date_str) = tasks[task_idx].constraint_date {
-                    if let Ok(c_date) = NaiveDateTime::parse_from_str(c_date_str, "%Y-%m-%dT%H:%M:%S") {
-                        match c_type.as_str() {
-                            "SNET" => { // Start No Earlier Than
-                                earliest_start = earliest_start.max(c_date);
-                            }
-                            "MSO" => { // Must Start On
-                                earliest_start = c_date;
-                            }
-                            _ => {}
+                    let c_date = Self::parse_date_robust(c_date_str, earliest_start);
+                    match c_type.as_str() {
+                        "SNET" => {
+                            earliest_start = earliest_start.max(c_date);
                         }
+                        "MSO" => {
+                            earliest_start = c_date;
+                        }
+                        _ => {}
                     }
                 }
             }
@@ -242,9 +284,17 @@ impl Scheduler {
                 calc.add_working_hours(start_dt, tasks[task_idx].duration_hours)
             };
 
-            tasks[task_idx].start_date = start_dt.format("%Y-%m-%dT%H:%M:%S").to_string();
-            tasks[task_idx].finish_date = finish_dt.format("%Y-%m-%dT%H:%M:%S").to_string();
+            let new_start_str = start_dt.format("%Y-%m-%dT%H:%M:%S").to_string();
+            let new_finish_str = finish_dt.format("%Y-%m-%dT%H:%M:%S").to_string();
+
+            if tasks[task_idx].start_date != new_start_str || tasks[task_idx].finish_date != new_finish_str {
+                any_changed = true;
+                tasks[task_idx].start_date = new_start_str;
+                tasks[task_idx].finish_date = new_finish_str;
+            }
         }
+
+        any_changed
     }
 
     fn schedule_backward(

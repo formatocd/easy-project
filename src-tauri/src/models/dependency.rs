@@ -91,14 +91,15 @@ impl Dependency {
             return None;
         }
 
+        let clean_text = text.trim_start_matches(|c: char| !c.is_ascii_digit() && c != '-');
         let mut pred_str = String::new();
         let mut rest = "";
 
-        for (idx, ch) in text.char_indices() {
+        for (idx, ch) in clean_text.char_indices() {
             if ch.is_ascii_digit() {
                 pred_str.push(ch);
             } else {
-                rest = &text[idx..];
+                rest = &clean_text[idx..];
                 break;
             }
         }

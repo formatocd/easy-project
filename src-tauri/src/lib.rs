@@ -30,6 +30,9 @@ pub fn run() {
             commands::indent_tasks,
             commands::outdent_task,
             commands::outdent_tasks,
+            commands::move_task_up,
+            commands::move_task_down,
+            commands::move_task_to,
             commands::set_tasks_duration,
             commands::set_task_predecessors,
             commands::add_dependency,
@@ -39,7 +42,8 @@ pub fn run() {
             commands::undo,
             commands::redo,
             commands::get_initial_config,
-            commands::set_window_title
+            commands::set_window_title,
+            commands::force_close_window
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -129,6 +129,18 @@ export const tauriApi = {
     return await invoke<ProjectPayload>('outdent_tasks', { taskIds });
   },
 
+  async moveTaskUp(taskId: number): Promise<ProjectPayload> {
+    return await invoke<ProjectPayload>('move_task_up', { taskId });
+  },
+
+  async moveTaskDown(taskId: number): Promise<ProjectPayload> {
+    return await invoke<ProjectPayload>('move_task_down', { taskId });
+  },
+
+  async moveTaskTo(sourceId: number, targetId: number): Promise<ProjectPayload> {
+    return await invoke<ProjectPayload>('move_task_to', { sourceId, targetId });
+  },
+
   async setTasksDuration(taskIds: number[], durationHours: number): Promise<ProjectPayload> {
     return await invoke<ProjectPayload>('set_tasks_duration', { taskIds, durationHours });
   },
@@ -185,5 +197,9 @@ export const tauriApi = {
     } catch {
       document.title = title;
     }
+  },
+
+  async forceCloseWindow(): Promise<void> {
+    await invoke('force_close_window');
   },
 };

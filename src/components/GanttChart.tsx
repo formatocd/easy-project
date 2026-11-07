@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
-import { Dependency, TaskDto, ZoomLevel, Task } from '../types/project';
+import { Dependency, TaskDto, ZoomLevel, Task, Calendar, CalendarException } from '../types/project';
 import { formatDateTime, formatDuration, getPixelsPerHour } from '../utils/formatters';
 
 interface GanttChartProps {
@@ -9,6 +9,8 @@ interface GanttChartProps {
   selectedTaskId: number | null;
   hoursPerDay: number;
   projectStartDate: string;
+  calendar?: Calendar;
+  exceptions?: CalendarException[];
   onSelectTask: (taskId: number) => void;
   onUpdateTask: (task: Task) => void;
   onAddDependency: (predId: number, succId: number) => void;
@@ -25,6 +27,8 @@ export const GanttChart: React.FC<GanttChartProps> = ({
   selectedTaskId,
   hoursPerDay,
   projectStartDate,
+  calendar,
+  exceptions = [],
   onSelectTask,
   onUpdateTask,
   onAddDependency,
@@ -105,6 +109,18 @@ export const GanttChart: React.FC<GanttChartProps> = ({
     }
   }, [tasks, projectStartDate]);
 
+  // Map of calendar exceptions by YYYY-MM-DD
+  const exceptionMap = useMemo(() => {
+    const map = new Map<string, CalendarException>();
+    if (exceptions) {
+      for (const exc of exceptions) {
+        const dateStr = exc.exception_date.slice(0, 10);
+        map.set(dateStr, exc);
+      }
+    }
+    return map;
+  }, [exceptions]);
+
   // Timeline ticks (Days and Months)
   const timelineTicks = useMemo(() => {
     const ticks: {
@@ -112,7 +128,8 @@ export const GanttChart: React.FC<GanttChartProps> = ({
       width: number;
       labelTop?: string;
       labelBottom: string;
-      isWeekend?: boolean;
+      isNonWorking: boolean;
+      nonWorkingLabel?: string;
     }[] = [];
     const current = new Date(minDate);
     const dayWidth = 24 * pxPerHour;
@@ -121,8 +138,46 @@ export const GanttChart: React.FC<GanttChartProps> = ({
       const x = ((current.getTime() - startMs) / (1000 * 3600)) * pxPerHour;
       const day = current.getDate();
       const month = current.getMonth() + 1;
-      const weekday = current.getDay();
+      const weekday = current.getDay(); // 0: Sun, 6: Sat
       const isWeekend = weekday === 0 || weekday === 6;
+
+      const y = current.getFullYear();
+      const m = String(month).padStart(2, '0');
+      const d = String(day).padStart(2, '0');
+      const dateKey = `${y}-${m}-${d}`;
+
+      const exc = exceptionMap.get(dateKey);
+      let isNonWorking = false;
+      let nonWorkingLabel: string | undefined = undefined;
+
+      if (exc) {
+        if (!exc.is_working || exc.working_hours === 0) {
+          isNonWorking = true;
+          nonWorkingLabel = exc.description || 'Día festivo / No laborable';
+        } else {
+          isNonWorking = false;
+        }
+      } else {
+        let hours = 8;
+        if (calendar) {
+          switch (weekday) {
+            case 0: hours = calendar.sun_hours; break;
+            case 1: hours = calendar.mon_hours; break;
+            case 2: hours = calendar.tue_hours; break;
+            case 3: hours = calendar.wed_hours; break;
+            case 4: hours = calendar.thu_hours; break;
+            case 5: hours = calendar.fri_hours; break;
+            case 6: hours = calendar.sat_hours; break;
+          }
+        } else {
+          hours = isWeekend ? 0 : 8;
+        }
+
+        if (hours === 0) {
+          isNonWorking = true;
+          nonWorkingLabel = weekday === 0 ? 'Domingo' : weekday === 6 ? 'Sábado' : 'Día no laborable';
+        }
+      }
 
       const MONTH_NAMES = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
       const labelBottom = `${day}`;
@@ -131,12 +186,12 @@ export const GanttChart: React.FC<GanttChartProps> = ({
           ? MONTH_NAMES[month - 1]
           : undefined;
 
-      ticks.push({ x, width: dayWidth, labelTop, labelBottom, isWeekend });
+      ticks.push({ x, width: dayWidth, labelTop, labelBottom, isNonWorking, nonWorkingLabel });
       current.setDate(current.getDate() + 1);
     }
 
     return ticks;
-  }, [minDate, maxDate, startMs, pxPerHour]);
+  }, [minDate, maxDate, startMs, pxPerHour, exceptionMap, calendar]);
 
   // Today marker
   const todayX = useMemo(() => {
@@ -243,11 +298,18 @@ export const GanttChart: React.FC<GanttChartProps> = ({
             <div
               key={i}
               style={{ left: `${tick.x}px`, width: `${tick.width}px` }}
-              className={`absolute top-0 bottom-0 border-r border-neutral-200 dark:border-neutral-800 px-1 py-0.5 flex flex-col justify-between ${
-                tick.isWeekend ? 'bg-neutral-200/50 dark:bg-neutral-950/40 text-neutral-500' : 'text-neutral-700 dark:text-neutral-300'
+              title={tick.nonWorkingLabel ? `No laborable (${tick.nonWorkingLabel})` : undefined}
+              className={`absolute top-0 bottom-0 border-r px-1 py-0.5 flex flex-col justify-between ${
+                tick.isNonWorking
+                  ? 'bg-red-100/70 dark:bg-red-950/50 border-red-200/80 dark:border-red-900/60 text-red-700 dark:text-red-300'
+                  : 'border-neutral-200 dark:border-neutral-800 text-neutral-700 dark:text-neutral-300'
               }`}
             >
-              <div className="font-bold text-[10px] text-blue-600 dark:text-blue-400 truncate text-center">
+              <div
+                className={`font-bold text-[10px] truncate text-center ${
+                  tick.isNonWorking ? 'text-red-600 dark:text-red-400' : 'text-blue-600 dark:text-blue-400'
+                }`}
+              >
                 {tick.labelTop || ''}
               </div>
               <div className="text-center font-mono text-[10px]">{tick.labelBottom}</div>
@@ -261,8 +323,10 @@ export const GanttChart: React.FC<GanttChartProps> = ({
             <div
               key={idx}
               style={{ left: `${tick.x}px`, width: `${tick.width}px` }}
-              className={`absolute top-0 bottom-0 border-r border-neutral-100 dark:border-neutral-800/60 ${
-                tick.isWeekend ? 'bg-neutral-100/70 dark:bg-neutral-950/30' : ''
+              className={`absolute top-0 bottom-0 border-r ${
+                tick.isNonWorking
+                  ? 'bg-gradient-to-b from-red-500/14 via-red-500/8 to-red-500/4 dark:from-red-900/30 dark:via-red-950/20 dark:to-red-950/10 border-red-200/50 dark:border-red-900/30 shadow-[inset_0_0_12px_rgba(239,68,68,0.05)]'
+                  : 'border-neutral-100 dark:border-neutral-800/60'
               }`}
             />
           ))}

@@ -1,5 +1,7 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { ActiveView, Calendar, CalendarException, ProjectPayload, Task, TaskDto, ZoomLevel } from './types/project';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { ActiveView, Calendar, CalendarException, Dependency, ProjectPayload, Task, TaskDto, ZoomLevel } from './types/project';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import { message } from '@tauri-apps/plugin-dialog';
 import { tauriApi } from './services/tauriApi';
 import { Toolbar } from './components/Toolbar';
 import { TaskSheet } from './components/TaskSheet';
@@ -29,6 +31,12 @@ export const App: React.FC = () => {
     return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
   const [isDirty, setIsDirty] = useState<boolean>(false);
+
+  const isDirtyRef = useRef(isDirty);
+  isDirtyRef.current = isDirty;
+
+  const projectPayloadRef = useRef(projectPayload);
+  projectPayloadRef.current = projectPayload;
 
   // Synchronize Window Title with project name and unsaved changes indicator (*)
   useEffect(() => {
@@ -113,6 +121,27 @@ export const App: React.FC = () => {
     });
   }, []);
 
+  // Auto-clean collapsedTaskIds when parents lose their children
+  useEffect(() => {
+    if (!projectPayload) return;
+    setCollapsedTaskIds((prev) => {
+      if (prev.size === 0) return prev;
+      const parentIdsWithChildren = new Set(
+        projectPayload.task_dtos.filter((t) => t.has_children).map((t) => t.id)
+      );
+      let changed = false;
+      const next = new Set<number>();
+      for (const id of prev) {
+        if (parentIdsWithChildren.has(id)) {
+          next.add(id);
+        } else {
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [projectPayload]);
+
   // Compute visible tasks respecting hierarchical collapse
   const visibleTaskDtos = useMemo(() => {
     if (!projectPayload) return [];
@@ -196,22 +225,26 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleSave = async () => {
-    if (!projectPayload) return;
+  const handleSave = async (): Promise<boolean> => {
+    const payload = projectPayloadRef.current;
+    if (!payload) return false;
     try {
       const savedPath = await tauriApi.saveProjectDialog(
-        projectPayload.data.file_path,
-        projectPayload.data.meta.name
+        payload.data.file_path,
+        payload.data.meta.name
       );
       if (savedPath) {
         setProjectPayload({
-          ...projectPayload,
-          data: { ...projectPayload.data, file_path: savedPath },
+          ...payload,
+          data: { ...payload.data, file_path: savedPath },
         });
         setIsDirty(false);
+        return true;
       }
+      return false;
     } catch (err: any) {
       alert(`Error al guardar: ${err}`);
+      return false;
     }
   };
 
@@ -288,15 +321,60 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleAddTask = async (name?: string) => {
+  const handleAddTask = async (name?: string, afterId?: number | null) => {
     try {
-      const payload = await tauriApi.addTask(selectedTaskId ?? undefined, name);
+      const payload = await tauriApi.addTask(afterId ?? undefined, name);
       setProjectPayload(payload);
       setIsDirty(true);
-      const last = payload.task_dtos[payload.task_dtos.length - 1];
-      if (last) setSelectedTaskIds([last.id]);
+      if (payload.active_task_id != null) {
+        setSelectedTaskIds([payload.active_task_id]);
+      } else {
+        const last = payload.task_dtos[payload.task_dtos.length - 1];
+        if (last) setSelectedTaskIds([last.id]);
+      }
     } catch (err: any) {
       alert(`Error al añadir tarea: ${err}`);
+    }
+  };
+
+  const handleMoveTaskUp = async () => {
+    if (selectedTaskId === null) return;
+    try {
+      const payload = await tauriApi.moveTaskUp(selectedTaskId);
+      setProjectPayload(payload);
+      setIsDirty(true);
+      if (payload.active_task_id != null) {
+        setSelectedTaskIds([payload.active_task_id]);
+      }
+    } catch (err: any) {
+      alert(`Error al mover tarea: ${err}`);
+    }
+  };
+
+  const handleMoveTaskDown = async () => {
+    if (selectedTaskId === null) return;
+    try {
+      const payload = await tauriApi.moveTaskDown(selectedTaskId);
+      setProjectPayload(payload);
+      setIsDirty(true);
+      if (payload.active_task_id != null) {
+        setSelectedTaskIds([payload.active_task_id]);
+      }
+    } catch (err: any) {
+      alert(`Error al mover tarea: ${err}`);
+    }
+  };
+
+  const handleMoveTaskTo = async (sourceId: number, targetId: number) => {
+    try {
+      const payload = await tauriApi.moveTaskTo(sourceId, targetId);
+      setProjectPayload(payload);
+      setIsDirty(true);
+      if (payload.active_task_id != null) {
+        setSelectedTaskIds([payload.active_task_id]);
+      }
+    } catch (err: any) {
+      alert(`Error al mover tarea: ${err}`);
     }
   };
 
@@ -429,6 +507,18 @@ export const App: React.FC = () => {
       } else if (e.key === 'Delete' && selectedTaskIds.length > 0 && !isInput) {
         e.preventDefault();
         handleDeleteTask();
+      } else if (e.altKey && e.key === 'ArrowUp' && selectedTaskId !== null && !isInput) {
+        e.preventDefault();
+        handleMoveTaskUp();
+      } else if (e.altKey && e.key === 'ArrowDown' && selectedTaskId !== null && !isInput) {
+        e.preventDefault();
+        handleMoveTaskDown();
+      } else if (e.altKey && (e.key === 'ArrowRight' || e.key === 'Right') && selectedTaskIds.length > 0 && !isInput) {
+        e.preventDefault();
+        handleIndentTask();
+      } else if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'Left') && selectedTaskIds.length > 0 && !isInput) {
+        e.preventDefault();
+        handleOutdentTask();
       }
     };
 
@@ -472,8 +562,83 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleSaveTaskDetails = (task: Task) => {
-    handleUpdateTask(task);
+  // Intercept window close when there are unsaved changes
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+
+    const setupCloseHandler = async () => {
+      try {
+        const appWindow = getCurrentWindow();
+        unlisten = await appWindow.onCloseRequested(async (event) => {
+          if (!isDirtyRef.current) {
+            return;
+          }
+
+          event.preventDefault();
+
+          const answer = await message(
+            'El proyecto tiene cambios sin guardar. ¿Deseas guardarlos antes de salir?',
+            {
+              title: 'Easy Project',
+              kind: 'warning',
+              buttons: {
+                yes: 'Guardar',
+                no: 'No guardar',
+                cancel: 'Cancelar',
+              },
+            }
+          );
+
+          if (answer === 'Yes' || answer === 'Guardar') {
+            const saved = await handleSave();
+            if (saved) {
+              await tauriApi.forceCloseWindow();
+            }
+          } else if (answer === 'No' || answer === 'No guardar') {
+            await tauriApi.forceCloseWindow();
+          }
+        });
+      } catch (err) {
+        console.error('Error al registrar listener de cierre:', err);
+      }
+    };
+
+    setupCloseHandler();
+
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, []);
+
+  const handleSaveTaskDetails = async (task: Task, predecessors: Dependency[]) => {
+    try {
+      const hoursPerDay = projectPayload?.data.meta.hours_per_day || 8;
+      const shorthand = predecessors
+        .map((dep) => {
+          let s = `${dep.predecessor_id}`;
+          if (dep.dep_type && dep.dep_type !== 'FS') {
+            s += dep.dep_type;
+          }
+          if (dep.lag_hours && Math.abs(dep.lag_hours) > 0.001) {
+            const lagDays = dep.lag_hours / hoursPerDay;
+            if (Math.abs(dep.lag_hours % hoursPerDay) < 0.001) {
+              s += lagDays > 0 ? `+${lagDays}d` : `${lagDays}d`;
+            } else {
+              s += dep.lag_hours > 0 ? `+${dep.lag_hours}h` : `${dep.lag_hours}h`;
+            }
+          }
+          return s;
+        })
+        .join('; ');
+
+      await tauriApi.updateTask(task);
+      const payload = await tauriApi.setTaskPredecessors(task.id, shorthand);
+      setProjectPayload(payload);
+      setIsDirty(true);
+      setIsTaskDetailsOpen(false);
+    } catch (err: any) {
+      alert(`Error al guardar tarea: ${err}`);
+    }
   };
 
   const handleExportPng = () => {
@@ -545,6 +710,17 @@ export const App: React.FC = () => {
   }
 
   const selectedTask = visibleTaskDtos.find((t) => t.id === selectedTaskId) || projectPayload.task_dtos.find((t) => t.id === selectedTaskId) || null;
+  const selectedTaskIndex = visibleTaskDtos.findIndex((t) => t.id === selectedTaskId);
+  const canMoveTaskUp = selectedTask !== null && selectedTaskIndex !== -1 && (
+    selectedTask.depth === 0
+      ? visibleTaskDtos.some((t, idx) => idx < selectedTaskIndex && t.depth === 0)
+      : visibleTaskDtos.some((t, idx) => idx < selectedTaskIndex && (t.depth === selectedTask.depth || (t.depth === selectedTask.depth - 1 && idx > 0)))
+  );
+  const canMoveTaskDown = selectedTask !== null && selectedTaskIndex !== -1 && (
+    selectedTask.depth === 0
+      ? visibleTaskDtos.some((t, idx) => idx > selectedTaskIndex && t.depth === 0)
+      : visibleTaskDtos.some((t, idx) => idx > selectedTaskIndex && (t.depth === selectedTask.depth || t.depth === selectedTask.depth - 1))
+  );
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-white dark:bg-neutral-950 font-sans">
@@ -559,6 +735,8 @@ export const App: React.FC = () => {
         zoomLevel={zoomLevel}
         darkMode={darkMode}
         hasSelectedTask={selectedTaskIds.length > 0}
+        canMoveUp={canMoveTaskUp}
+        canMoveDown={canMoveTaskDown}
         onNew={handleNew}
         onOpen={handleOpen}
         onSave={handleSave}
@@ -575,6 +753,8 @@ export const App: React.FC = () => {
         onDeleteTask={handleDeleteTask}
         onIndentTask={handleIndentTask}
         onOutdentTask={handleOutdentTask}
+        onMoveTaskUp={handleMoveTaskUp}
+        onMoveTaskDown={handleMoveTaskDown}
         onSaveBaseline={handleSaveBaseline}
         onClearBaseline={handleClearBaseline}
         onViewChange={setActiveView}
@@ -604,6 +784,12 @@ export const App: React.FC = () => {
                 onSetPredecessors={handleSetPredecessors}
                 onAddTask={handleAddTask}
                 onAddTasksBatch={handleAddTasksBatch}
+                onMoveTaskTo={handleMoveTaskTo}
+                onMoveTaskUp={handleMoveTaskUp}
+                onMoveTaskDown={handleMoveTaskDown}
+                onIndentTask={handleIndentTask}
+                onOutdentTask={handleOutdentTask}
+                onDeleteTask={handleDeleteTask}
                 scrollRef={scrollRef}
                 onScroll={onScroll}
               />
@@ -616,6 +802,8 @@ export const App: React.FC = () => {
                 selectedTaskId={selectedTaskId}
                 hoursPerDay={projectPayload.data.meta.hours_per_day}
                 projectStartDate={projectPayload.data.meta.project_start_date}
+                calendar={projectPayload.data.calendar}
+                exceptions={projectPayload.data.exceptions}
                 onSelectTask={(id) => handleSelectTask(id)}
                 onUpdateTask={handleUpdateTask}
                 onAddDependency={handleAddDependency}
