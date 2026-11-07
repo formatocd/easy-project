@@ -139,7 +139,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           <button
             onClick={onOpenSettings}
             className="group inline-flex items-center gap-1.5 px-2 py-0.5 rounded hover:bg-neutral-200 dark:hover:bg-neutral-800 transition min-w-0"
-            title="Editar propiedades del proyecto"
+            title={filePath ? `Archivo: ${filePath}` : 'Editar propiedades del proyecto'}
           >
             <span className="font-semibold text-neutral-800 dark:text-neutral-200 truncate max-w-[280px]">
               {projectName}
