@@ -15,11 +15,11 @@ jobs:
       matrix:
         include:
           - platform: 'macos-latest'
-            target: 'aarch64-apple-darwin'
+            args: ''
           - platform: 'ubuntu-22.04'
-            target: ''
+            args: ''
           - platform: 'windows-latest'
-            target: ''
+            args: ''
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -38,8 +38,6 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target != '' && matrix.target || '' }}
 
       - name: Install Linux system dependencies
         if: matrix.platform == 'ubuntu-22.04'
@@ -55,10 +53,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'v0.1.0' }}
-          releaseName: 'Easy Project ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'v0.1.0' }}'
+          tagName: ${{ github.ref_name }}
+          releaseName: 'Easy Project ${{ github.ref_name }}'
           releaseBody: |
-            ## Easy Project ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'v0.1.0' }}
+            ## Easy Project ${{ github.ref_name }}
 
             Download the installer for your operating system:
             - **Windows:** `.exe` (NSIS Installer) / `.msi`
@@ -66,4 +64,4 @@ jobs:
             - **Linux:** `.deb` (Debian/Ubuntu) or `.AppImage`
           releaseDraft: false
           prerelease: false
-          args: ${{ matrix.target != '' && format('--target {0}', matrix.target) || '' }}
+          args: ${{ matrix.args }}
