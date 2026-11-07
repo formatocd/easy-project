@@ -27,6 +27,7 @@ import {
   Pencil,
   Zap,
   ChevronDown,
+  Info,
 } from 'lucide-react';
 import { ActiveView, ZoomLevel } from '../types/project';
 import { Language, translations, SUPPORTED_LANGUAGES } from '../i18n/translations';
@@ -54,6 +55,7 @@ interface ToolbarProps {
   onOpenPdfModal: () => void;
   onOpenSettings: () => void;
   onOpenCalendarModal: () => void;
+  onOpenAbout: () => void;
   onUndo: () => void;
   onRedo: () => void;
   onAddTask: () => void;
@@ -95,6 +97,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onOpenPdfModal,
   onOpenSettings,
   onOpenCalendarModal,
+  onOpenAbout,
   onUndo,
   onRedo,
   onAddTask,
@@ -199,10 +202,20 @@ export const Toolbar: React.FC<ToolbarProps> = ({
 
           <button
             onClick={onToggleTheme}
-            className="p-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-600 dark:text-neutral-300"
+            className="p-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-600 dark:text-neutral-300 transition"
             title={t.themeToggle}
           >
             {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </button>
+
+          {/* About Modal Button */}
+          <button
+            onClick={onOpenAbout}
+            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded border border-neutral-300 dark:border-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-800 text-[11px] font-medium text-neutral-700 dark:text-neutral-300 transition cursor-pointer"
+            title={t.about || 'Acerca de'}
+          >
+            <Info className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+            <span className="hidden sm:inline">{t.about || 'Acerca de'}</span>
           </button>
         </div>
       </div>

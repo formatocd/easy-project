@@ -13,6 +13,7 @@ import { ProjectSettingsModal } from './components/ProjectSettingsModal';
 import { TaskDetailsModal } from './components/TaskDetailsModal';
 import { ExportPdfModal } from './components/ExportPdfModal';
 import { CalendarSettingsModal } from './components/CalendarSettingsModal';
+import { AboutModal } from './components/AboutModal';
 import { Language } from './i18n/translations';
 
 export const App: React.FC = () => {
@@ -77,6 +78,7 @@ export const App: React.FC = () => {
   const [isTaskDetailsOpen, setIsTaskDetailsOpen] = useState(false);
   const [isExportPdfOpen, setIsExportPdfOpen] = useState(false);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [isAboutOpen, setIsAboutOpen] = useState(false);
 
   const selectedTaskId = selectedTaskIds[0] ?? null;
 
@@ -747,6 +749,7 @@ export const App: React.FC = () => {
         onOpenPdfModal={() => setIsExportPdfOpen(true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenCalendarModal={() => setIsCalendarOpen(true)}
+        onOpenAbout={() => setIsAboutOpen(true)}
         onUndo={handleUndo}
         onRedo={handleRedo}
         onAddTask={handleAddTask}
@@ -865,6 +868,12 @@ export const App: React.FC = () => {
         exceptions={projectPayload.data.exceptions}
         onClose={() => setIsCalendarOpen(false)}
         onSave={handleSaveCalendar}
+      />
+
+      <AboutModal
+        isOpen={isAboutOpen}
+        onClose={() => setIsAboutOpen(false)}
+        language={language}
       />
     </div>
   );
